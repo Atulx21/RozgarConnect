@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Platform } from 'react-native';
 import { Text, TextInput, Button, Card, Menu, Divider } from 'react-native-paper';
 import { router } from 'expo-router';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { validatePayAmount, validateWorkersNeeded, sanitizeInput } from '@/utils/validation';
-
-const JOB_CATEGORIES = ['Farming', 'Construction', 'Cleaning', 'Delivery', 'Cooking', 'Other'];
+import { JOB_CATEGORIES } from '@/utils/constants';
 
 export default function PostJobScreen() {
   const { user } = useAuth();
@@ -19,20 +19,37 @@ export default function PostJobScreen() {
   const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [deadlineDate, setDeadlineDate] = useState<Date>(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const onChangeDate = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowDatePicker(false);
+    }
+    
+    if (selectedDate) {
+      setDeadlineDate(selectedDate);
+    }
+  };
 
   const postJob = async () => {
     if (!title.trim() || !category || !description.trim() || !payAmount || !location.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      Alert.alert('Error', 'Please fill in all required fields.');
       return;
     }
 
     if (!validatePayAmount(payAmount)) {
-      Alert.alert('Error', 'Please enter a valid pay amount (1-100,000)');
+      Alert.alert('Error', 'Please enter a valid pay amount.');
       return;
     }
 
     if (!validateWorkersNeeded(workersNeeded)) {
-      Alert.alert('Error', 'Please enter a valid number of workers (1-50)');
+      Alert.alert('Error', 'Please enter a valid number of workers.');
+      return;
+    }
+    
+    if (deadlineDate < new Date()) {
+      Alert.alert('Error', 'The application deadline cannot be in the past.');
       return;
     }
 
@@ -52,7 +69,8 @@ export default function PostJobScreen() {
         pay_amount: parseFloat(payAmount),
         pay_type: payType,
         location: sanitizeInput(location),
-        status: 'open'
+        status: 'open',
+        application_deadline: deadlineDate.toISOString(),
       });
 
       if (error) throw error;
@@ -171,6 +189,30 @@ export default function PostJobScreen() {
             placeholder="Village, District"
           />
 
+          <Text style={styles.label}>Application Deadline *</Text>
+          <Button
+            icon="calendar"
+            mode="outlined"
+            onPress={() => setShowDatePicker(true)}
+            style={styles.dateButton}
+            contentStyle={styles.dateButtonContent}
+            labelStyle={styles.dateButtonLabel}
+          >
+            {deadlineDate.toLocaleDateString('en-IN')}
+          </Button>
+
+          {showDatePicker && (
+            <DateTimePicker
+              testID="dateTimePicker"
+              value={deadlineDate}
+              mode="date"
+              is24Hour={true}
+              display="default"
+              onChange={onChangeDate}
+              minimumDate={new Date()}
+            />
+          )}
+
           <Divider style={styles.divider} />
 
           <Button 
@@ -190,46 +232,65 @@ export default function PostJobScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
+  container: { 
+    flex: 1, 
+    backgroundColor: '#f5f5f5' 
   },
-  header: {
-    padding: 20,
-    paddingTop: 60,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+  header: { 
+    padding: 20, 
+    paddingTop: 60, 
+    backgroundColor: 'white', 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#e0e0e0' 
   },
-  title: {
-    color: '#2e7d32',
-    fontWeight: 'bold',
+  title: { 
+    color: '#2e7d32', 
+    fontWeight: 'bold' 
   },
-  formCard: {
-    margin: 15,
-    elevation: 2,
+  formCard: { 
+    margin: 15, 
+    elevation: 2 
   },
-  input: {
-    marginBottom: 15,
+  input: { 
+    marginBottom: 15 
   },
-  paySection: {
-    marginBottom: 15,
+  paySection: { 
+    marginBottom: 15 
   },
-  payInput: {
-    marginBottom: 10,
+  payInput: { 
+    marginBottom: 10 
   },
-  payTypeButtons: {
-    flexDirection: 'row',
-    gap: 10,
+  payTypeButtons: { 
+    flexDirection: 'row', 
+    gap: 10 
   },
-  payTypeButton: {
-    flex: 1,
+  payTypeButton: { 
+    flex: 1 
   },
-  divider: {
-    marginVertical: 20,
+  divider: { 
+    marginVertical: 20 
   },
-  postButton: {
-    backgroundColor: '#4caf50',
-    paddingVertical: 5,
+  postButton: { 
+    backgroundColor: '#4caf50', 
+    paddingVertical: 5 
   },
+  label: {
+    fontSize: 12,
+    color: '#666',
+    paddingBottom: 4,
+    marginLeft: 12,
+  },
+  dateButton: {
+    height: 56,
+    justifyContent: 'center',
+    borderColor: '#888',
+  },
+  dateButtonContent: {
+    justifyContent: 'flex-start',
+    paddingLeft: 4,
+  },
+  dateButtonLabel: {
+    color: '#333',
+    fontSize: 16,
+  }
 });

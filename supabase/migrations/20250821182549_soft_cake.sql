@@ -50,6 +50,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   updated_at timestamptz DEFAULT now()
 );
 
+ALTER TABLE public.jobs
+ADD COLUMN application_deadline TIMESTAMPTZ NOT NULL DEFAULT now() + interval '7 days';
+
 -- Create applications table
 CREATE TABLE IF NOT EXISTS applications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
