@@ -7,28 +7,25 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function MyJobsScreen() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user && profile?.role === 'provider') {
+    if (user) {
       fetchMyJobs();
+    } else {
+      setLoading(false);
     }
-  }, [user, profile]);
+  }, [user]);
 
   const fetchMyJobs = async () => {
+    if (!user) return;
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('jobs')
-        .select(`
-          *,
-          applications (
-            id,
-            status,
-            profiles:worker_id (full_name)
-          )
-        `)
+        .select(`*, applications (id)`)
         .eq('provider_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -71,12 +68,12 @@ export default function MyJobsScreen() {
     fetchMyJobs();
   };
 
-  if (!user || profile?.role !== 'provider') {
+  if (!user) {
     return (
       <View style={styles.container}>
         <View style={styles.emptyState}>
-          <Text variant="titleMedium">Access denied</Text>
-          <Text variant="bodyMedium">Only work providers can view this page</Text>
+          <Text variant="titleMedium">Access Denied</Text>
+          <Text variant="bodyMedium">You must be logged in to view your jobs.</Text>
         </View>
       </View>
     );
@@ -176,15 +173,6 @@ export default function MyJobsScreen() {
                 <Button onPress={() => router.push(`/jobs/${job.id}/applications`)}>
                   Applications ({job.applications?.length || 0})
                 </Button>
-                {job.status === 'in_progress' && (
-                  <Button 
-                    mode="contained"
-                    onPress={() => router.push(`/jobs/${job.id}/complete`)}
-                    style={styles.completeButton}
-                  >
-                    Complete
-                  </Button>
-                )}
               </Card.Actions>
             </Card>
           ))
@@ -282,9 +270,6 @@ const styles = StyleSheet.create({
   applicationsText: {
     color: '#888',
     fontSize: 12,
-  },
-  completeButton: {
-    backgroundColor: '#4caf50',
   },
   fab: {
     position: 'absolute',

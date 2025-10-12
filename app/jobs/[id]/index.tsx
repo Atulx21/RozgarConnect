@@ -9,6 +9,7 @@ import { formatDate } from '@/utils/dateHelpers';
 
 interface Job {
   id: string;
+  provider_id: string;
   title: string;
   category: string;
   description: string;
@@ -30,7 +31,7 @@ interface Job {
 
 export default function JobDetailsScreen() {
   const { id } = useLocalSearchParams();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [hasApplied, setHasApplied] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -44,16 +45,12 @@ export default function JobDetailsScreen() {
   }, [id]);
 
   useEffect(() => {
-    if (id && user && profile) {
-      if (profile.role === 'worker') {
-        checkApplicationStatus();
-      } else {
-        setIsCheckingStatus(false);
-      }
-    } else if (!user) {
+    if (id && user && job && user.id !== job.provider_id) {
+      checkApplicationStatus();
+    } else {
       setIsCheckingStatus(false);
     }
-  }, [id, user, profile]);
+  }, [id, user, job]);
 
   const fetchJobDetails = async () => {
     try {
@@ -61,35 +58,27 @@ export default function JobDetailsScreen() {
         .from('jobs')
         .select(`
           *,
-          profiles:provider_id (
-            id,
-            full_name,
-            village,
-            rating,
-            total_ratings
-          )
+          profiles:provider_id (*)
         `)
         .eq('id', id)
         .single();
-
       if (error) throw error;
       setJob(data);
     } catch (error) {
       console.error('Error fetching job details:', error);
-      Alert.alert('Error', 'Failed to load job details');
     } finally {
       setLoading(false);
     }
   };
 
   const checkApplicationStatus = async () => {
-    if (!user) return;
+    if (!user || !job) return;
     setIsCheckingStatus(true);
     try {
       const { data } = await supabase
         .from('applications')
         .select('id')
-        .eq('job_id', id)
+        .eq('job_id', job.id)
         .eq('worker_id', user.id)
         .single();
       setHasApplied(!!data);
@@ -102,7 +91,6 @@ export default function JobDetailsScreen() {
 
   const applyForJob = async () => {
     if (!user || !job) return;
-
     setApplying(true);
     try {
       const { error } = await supabase.from('applications').insert({
@@ -110,14 +98,11 @@ export default function JobDetailsScreen() {
         worker_id: user.id,
         status: 'pending'
       });
-
       if (error) throw error;
-
       setHasApplied(true);
       Alert.alert('Success', 'Application submitted successfully!');
     } catch (error) {
-      console.error('Error applying for job:', error);
-      Alert.alert('Error', 'Failed to submit application. You may have already applied.');
+      Alert.alert('Error', 'Failed to submit application.');
     } finally {
       setApplying(false);
     }
@@ -125,77 +110,79 @@ export default function JobDetailsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" />
-        <Text style={styles.loadingText}>Loading Job Details...</Text>
       </View>
     );
   }
 
   if (!job) {
     return (
-      <View style={styles.centerContainer}>
-        <Text variant="headlineSmall" style={styles.title}>
-          Job not found
-        </Text>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text>Job not found</Text>
       </View>
     );
   }
 
   const isDeadlinePassed = new Date(job.application_deadline) < new Date();
+  const isOwner = user?.id === job.provider_id;
 
-  const renderWorkerActions = () => {
-    if (isCheckingStatus) {
-      return (
-        <View style={styles.actionsContainer}>
-          <ActivityIndicator />
-        </View>
-      );
-    }
-
+  const renderApplicantActions = () => {
+    if (isCheckingStatus) return <ActivityIndicator />;
     if (hasApplied) {
       return (
         <Card style={styles.appliedCard}>
           <Card.Content>
-            <Text variant="titleMedium" style={styles.appliedText}>
-              ✓ Application Submitted
-            </Text>
-            <Text variant="bodyMedium" style={styles.appliedSubtext}>
-              The employer will review your application.
-            </Text>
+            <Text style={styles.appliedText}>✓ Application Submitted</Text>
           </Card.Content>
         </Card>
       );
     }
-
     if (isDeadlinePassed) {
       return (
         <Card style={styles.appliedCard}>
           <Card.Content>
-            <Text variant="titleMedium" style={styles.expiredText}>
-              Applications Closed
-            </Text>
-            <Text variant="bodyMedium" style={styles.appliedSubtext}>
-              The deadline for this job has passed.
-            </Text>
+            <Text style={styles.expiredText}>Applications Closed</Text>
           </Card.Content>
         </Card>
       );
     }
-
-    return (
-      <Button 
-        mode="contained" 
-        onPress={applyForJob}
-        loading={applying}
-        disabled={applying}
-        style={styles.applyButton}
-        icon="send"
-      >
-        Apply for this Job
-      </Button>
-    );
+    if (job.status === 'open') {
+      return (
+        <Button 
+          mode="contained" 
+          onPress={applyForJob} 
+          loading={applying} 
+          disabled={applying} 
+          style={styles.applyButton}
+        >
+          Apply for this Job
+        </Button>
+      );
+    }
+    return null;
   };
+
+  const renderOwnerActions = () => (
+    <>
+      <Button 
+        mode="outlined" 
+        onPress={() => router.push(`/jobs/${job.id}/applications`)} 
+        style={styles.actionButton}
+      >
+        View Applications
+      </Button>
+      {job.status === 'in_progress' && (
+        <Button 
+          mode="contained" 
+          onPress={() => router.push(`/jobs/${job.id}/complete`)} 
+          style={[styles.actionButton, styles.completeButton]}
+        >
+          Mark as Complete
+        </Button>
+      )}
+    </>
+  );
 
   return (
     <ScrollView style={styles.container}>
@@ -213,31 +200,52 @@ export default function JobDetailsScreen() {
         </Text>
       </View>
 
-      <View style={styles.actionsContainer}>
-        {profile?.role === 'provider' && job.profiles.id === user?.id && (
-          <>
-            <Button 
-              mode="outlined" 
-              onPress={() => router.push(`/jobs/${job.id}/applications`)}
-              style={styles.actionButton}
-              icon="account-group"
-            >
-              View Applications
-            </Button>
-            {job.status === 'in_progress' && (
-              <Button 
-                mode="contained" 
-                onPress={() => router.push(`/jobs/${job.id}/complete`)}
-                style={[styles.actionButton, styles.completeButton]}
-                icon="check-circle"
-              >
-                Mark as Complete
-              </Button>
-            )}
-          </>
-        )}
+      <Card style={styles.jobCard}>
+        <Card.Content>
+          <Text variant="titleLarge" style={styles.jobTitle}>
+            {job.title}
+          </Text>
+          <Chip style={styles.categoryChip}>{job.category}</Chip>
+          
+          <Text style={styles.description}>{job.description}</Text>
+          
+          <View style={styles.detailsGrid}>
+            <View style={styles.detailItem}>
+              <MaterialIcons name="location-on" size={20} color="#666" />
+              <Text style={styles.detailText}>{job.location}</Text>
+            </View>
+            
+            <View style={styles.detailItem}>
+              <MaterialIcons name="attach-money" size={20} color="#4caf50" />
+              <Text style={styles.payText}>
+                ₹{job.pay_amount} {job.pay_type === 'per_day' ? 'per day' : 'total'}
+              </Text>
+            </View>
 
-        {profile?.role === 'worker' && job.status === 'open' && renderWorkerActions()}
+            <View style={styles.detailItem}>
+              <MaterialIcons name="group" size={20} color="#666" />
+              <Text style={styles.detailText}>
+                {job.workers_needed} worker{job.workers_needed > 1 ? 's' : ''} needed
+              </Text>
+            </View>
+
+            <View style={styles.detailItem}>
+              <MaterialIcons 
+                name="event" 
+                size={20} 
+                color={isDeadlinePassed ? '#f44336' : '#666'} 
+              />
+              <Text style={[styles.detailText, isDeadlinePassed && styles.expiredText]}>
+                Apply by: {formatDate(job.application_deadline)}
+                {isDeadlinePassed && " (Expired)"}
+              </Text>
+            </View>
+          </View>
+        </Card.Content>
+      </Card>
+
+      <View style={styles.actionsContainer}>
+        {user && (isOwner ? renderOwnerActions() : renderApplicantActions())}
       </View>
     </ScrollView>
   );
@@ -248,50 +256,80 @@ const styles = StyleSheet.create({
     flex: 1, 
     backgroundColor: '#f5f5f5' 
   },
-  centerContainer: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+  header: {
+    paddingTop: 60,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-  loadingText: { 
-    marginTop: 10, 
-    color: '#666' 
+  backButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 10,
   },
-  header: { 
-    paddingTop: 60, 
-    paddingHorizontal: 10, 
-    backgroundColor: 'white' 
+  title: {
+    color: '#2e7d32',
+    fontWeight: 'bold',
   },
-  title: { 
-    color: '#2e7d32', 
-    fontWeight: 'bold' 
+  jobCard: {
+    margin: 15,
+    elevation: 2,
   },
-  actionsContainer: { 
-    padding: 15 
+  jobTitle: {
+    color: '#2e7d32',
+    fontWeight: 'bold',
+    marginBottom: 10,
   },
-  appliedCard: { 
-    backgroundColor: '#e8f5e8', 
-    elevation: 1 
+  categoryChip: {
+    alignSelf: 'flex-start',
+    marginBottom: 15,
   },
-  appliedText: { 
-    color: '#2e7d32', 
-    fontWeight: 'bold' 
+  description: {
+    color: '#666',
+    marginBottom: 15,
+    lineHeight: 20,
   },
-  appliedSubtext: { 
-    color: '#666', 
-    marginTop: 4 
+  detailsGrid: {
+    gap: 12,
   },
-  expiredText: { 
-    color: '#f44336' 
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
-  applyButton: { 
-    backgroundColor: '#4caf50', 
-    paddingVertical: 5 
+  detailText: {
+    color: '#666',
   },
-  actionButton: { 
-    marginBottom: 10 
+  payText: {
+    color: '#4caf50',
+    fontWeight: 'bold',
   },
-  completeButton: { 
-    backgroundColor: '#4caf50' 
-  }
+  actionsContainer: {
+    padding: 15,
+  },
+  appliedCard: {
+    backgroundColor: '#e8f5e8',
+    elevation: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  appliedText: {
+    color: '#2e7d32',
+    fontWeight: 'bold',
+  },
+  expiredText: {
+    color: '#f44336',
+    fontWeight: 'bold',
+  },
+  applyButton: {
+    backgroundColor: '#4caf50',
+    paddingVertical: 5,
+  },
+  actionButton: {
+    marginBottom: 10,
+  },
+  completeButton: {
+    backgroundColor: '#4caf50',
+  },
 });
