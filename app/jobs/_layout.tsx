@@ -5,7 +5,6 @@ export default function JobsLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="[id]" />
       <Stack.Screen name="post" />
-      <Stack.Screen name="rate" />
     </Stack>
   );
 }

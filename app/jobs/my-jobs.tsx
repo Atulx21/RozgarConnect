@@ -145,16 +145,28 @@ export default function MyJobsScreen() {
                 </Text>
                 
                 <View style={styles.jobDetails}>
-                  <Text style={styles.jobLocation}>📍 {job.location}</Text>
-                  <Text style={styles.jobPay}>
-                    💰 ₹{job.pay_amount} {job.pay_type === 'per_day' ? 'per day' : 'total'}
-                  </Text>
-                  <Text style={styles.jobWorkers}>
-                    👥 {job.workers_needed} worker{job.workers_needed > 1 ? 's' : ''} needed
-                  </Text>
-                  <Text style={styles.jobApplications}>
-                    📋 {job.applications?.length || 0} applications
-                  </Text>
+                  <View style={styles.detailItem}>
+                    <MaterialIcons name="location-on" size={16} color="#666" />
+                    <Text style={styles.detailText}>{job.location}</Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <MaterialIcons name="attach-money" size={16} color="#4caf50" />
+                    <Text style={styles.payText}>
+                      ₹{job.pay_amount} {job.pay_type === 'per_day' ? 'per day' : 'total'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <MaterialIcons name="group" size={16} color="#666" />
+                    <Text style={styles.detailText}>
+                      {job.workers_needed} worker{job.workers_needed > 1 ? 's' : ''} needed
+                    </Text>
+                  </View>
+                  <View style={styles.detailItem}>
+                    <MaterialIcons name="inbox" size={16} color="#888" />
+                    <Text style={styles.applicationsText}>
+                      {job.applications?.length || 0} applications
+                    </Text>
+                  </View>
                 </View>
               </Card.Content>
               <Card.Actions>
@@ -252,19 +264,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   jobDetails: {
-    gap: 4,
+    gap: 8,
+    marginTop: 12,
   },
-  jobLocation: {
+  detailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detailText: {
     color: '#666',
   },
-  jobPay: {
+  payText: {
     color: '#4caf50',
     fontWeight: 'bold',
   },
-  jobWorkers: {
-    color: '#666',
-  },
-  jobApplications: {
+  applicationsText: {
     color: '#888',
     fontSize: 12,
   },

@@ -67,7 +67,7 @@ export default function CompleteJobScreen() {
         [
           { 
             text: 'Rate Now', 
-            onPress: () => router.replace(`/jobs/rate/${id}`)
+            onPress: () => router.replace(`/jobs/${id}/rate`)
           }
         ]
       );

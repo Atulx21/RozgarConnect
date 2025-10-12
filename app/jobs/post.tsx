@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { validatePayAmount, validateWorkersNeeded, sanitizeInput } from '@/utils/validation';
 
+const JOB_CATEGORIES = ['Farming', 'Construction', 'Cleaning', 'Delivery', 'Cooking', 'Other'];
+
 export default function PostJobScreen() {
   const { user } = useAuth();
   const [title, setTitle] = useState('');
@@ -17,8 +19,6 @@ export default function PostJobScreen() {
   const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
-
-  const categories = ['Farming', 'Construction', 'Cleaning', 'Delivery', 'Cooking', 'Other'];
 
   const postJob = async () => {
     if (!title.trim() || !category || !description.trim() || !payAmount || !location.trim()) {
