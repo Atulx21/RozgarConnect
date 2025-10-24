@@ -83,10 +83,10 @@ export default function LoginScreen() {
       >
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <MaterialIcons name="handshake" size={56} color="#6DD5A5" />
+          <MaterialIcons name="handshake" size={56} color="#6DD5A5" />
           </View>
           <Text variant="displaySmall" style={styles.title}>
-            Gramin KaamConnect
+            RozgarConnect
           </Text>
           <Text variant="bodyLarge" style={styles.subtitle}>
             Connect with local work opportunities
