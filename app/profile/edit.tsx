@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Image } from 'react-native';
 import { Text, TextInput, Button, Card } from 'react-native-paper';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import { supabase } from '@/lib/supabase';
+import { decode } from 'base64-arraybuffer';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function EditProfileScreen() {
-  const { profile, updateProfile } = useAuth();
+  const { profile, updateProfile, user } = useAuth();
   const [fullName, setFullName] = useState('');
   const [village, setVillage] = useState('');
+  const [phone, setPhone] = useState('');
+  const [image, setImage] = useState(null);
+  const [currentAvatarUrl, setCurrentAvatarUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (profile) {
       setFullName(profile.full_name);
       setVillage(profile.village);
+      setPhone(profile.phone);
+      setCurrentAvatarUrl(profile.avatar_url);
     }
   }, [profile]);
 
@@ -41,6 +50,70 @@ export default function EditProfileScreen() {
     }
   };
 
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+      base64: true,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0]);
+    }
+  };
+
+  const uploadImage = async () => {
+    if (!image?.base64) return currentAvatarUrl;
+
+    try {
+      const fileName = `profile-${Date.now()}.jpg`;
+      const { data, error } = await supabase.storage
+        .from('profiles')
+        .upload(fileName, decode(image.base64), {
+          contentType: 'image/jpeg'
+        });
+
+      if (error) throw error;
+
+      // Delete old avatar if exists
+      if (currentAvatarUrl) {
+        await supabase.storage
+          .from('profiles')
+          .remove([currentAvatarUrl]);
+      }
+
+      return fileName;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      return currentAvatarUrl;
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!user?.id) return;
+    
+    setUploading(true);
+    try {
+      const imageUrl = await uploadImage();
+      const { error } = await supabase.from('profiles').upsert({
+        id: user.id,
+        full_name: fullName,
+        phone,
+        village,
+        avatar_url: imageUrl,
+      });
+
+      if (error) throw error;
+      // Navigate back or show success message
+    } catch (error) {
+      console.error('Error updating profile:', error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -59,6 +132,28 @@ export default function EditProfileScreen() {
 
       <Card style={styles.formCard}>
         <Card.Content>
+          <TouchableOpacity onPress={pickImage} style={{ alignItems: 'center', marginBottom: 20 }}>
+            {(image || currentAvatarUrl) ? (
+              <Image 
+                source={{ 
+                  uri: image ? image.uri : `${supabase.storage.from('profiles').getPublicUrl(currentAvatarUrl).data.publicUrl}`
+                }} 
+                style={{ width: 100, height: 100, borderRadius: 50 }} 
+              />
+            ) : (
+              <View style={{ 
+                width: 100, 
+                height: 100, 
+                borderRadius: 50, 
+                backgroundColor: '#e1e1e1',
+                justifyContent: 'center',
+                alignItems: 'center' 
+              }}>
+                <Text>Change Photo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
           <TextInput
             mode="outlined"
             label="Full Name"
@@ -77,6 +172,16 @@ export default function EditProfileScreen() {
             left={<TextInput.Icon icon="map-marker" />}
           />
 
+          <TextInput
+            mode="outlined"
+            label="Phone Number"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            style={styles.input}
+            left={<TextInput.Icon icon="phone" />}
+          />
+
           <View style={styles.roleDisplay}>
             <Text variant="bodyMedium" style={styles.roleLabel}>
               Role:
@@ -88,13 +193,13 @@ export default function EditProfileScreen() {
 
           <Button 
             mode="contained" 
-            onPress={handleSave}
-            loading={loading}
-            disabled={loading}
+            onPress={handleSubmit}
+            loading={loading || uploading}
+            disabled={loading || uploading}
             style={styles.saveButton}
             icon="content-save"
           >
-            Save Changes
+            {loading || uploading ? 'Saving...' : 'Save Changes'}
           </Button>
         </Card.Content>
       </Card>
