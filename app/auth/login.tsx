@@ -9,13 +9,15 @@ import {
   TouchableOpacity,
   Dimensions,
 } from 'react-native';
-import { Text, TextInput, Button, Card } from 'react-native-paper';
+import { Text, TextInput } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { validateEmail, validatePassword } from '@/utils/validation';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -151,183 +153,257 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+    <View style={styles.container}>
+      {/* Clean Background with Subtle Blurred Circles */}
+      <LinearGradient
+        colors={['#F0FDF4', '#DCFCE7', '#E8F5E9']}
+        style={StyleSheet.absoluteFillObject}
+      />
+      
+      {/* Subtle Blurred Accent Circles */}
+      <View style={[styles.blurCircle, styles.blurCircle1]} />
+      <View style={[styles.blurCircle, styles.blurCircle2]} />
+      <View style={[styles.blurCircle, styles.blurCircle3]} />
+
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
-        {/* Header Section */}
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <MaterialIcons name="handshake" size={56} color="#10B981" />
-          </View>
-          <Text variant="displaySmall" style={styles.title}>
-            RozgarConnect
-          </Text>
-          <Text variant="bodyLarge" style={styles.subtitle}>
-            Connect with local work opportunities
-          </Text>
-        </View>
-
-        {/* Form Card */}
-        <Card style={styles.formCard} mode="elevated">
-          <Card.Content style={styles.cardContent}>
-            <Text variant="headlineSmall" style={styles.formTitle}>
-              {isSignUp ? 'Create Account' : 'Welcome Back'}
-            </Text>
-            <Text variant="bodyMedium" style={styles.formSubtitle}>
-              {isSignUp
-                ? 'Sign up to start connecting with opportunities'
-                : 'Sign in to continue your journey'}
-            </Text>
-
-            {/* Email Input */}
-            <View style={styles.inputContainer}>
-              <TextInput
-                mode="outlined"
-                label="Email"
-                value={email}
-                onChangeText={handleEmailChange}
-                style={styles.input}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoComplete="email"
-                textContentType="emailAddress"
-                error={!!emailError}
-                disabled={loading}
-                outlineStyle={styles.inputOutline}
-                activeOutlineColor="#10B981"
-                left={
-                  <TextInput.Icon
-                    icon={() => (
-                      <MaterialIcons
-                        name="email"
-                        size={24}
-                        color={emailError ? '#EF4444' : '#718096'}
-                      />
-                    )}
-                  />
-                }
-              />
-              {emailError ? (
-                <Text style={styles.errorText}>{emailError}</Text>
-              ) : null}
-            </View>
-
-            {/* Password Input */}
-            <View style={styles.inputContainer}>
-              <TextInput
-                mode="outlined"
-                label="Password"
-                value={password}
-                onChangeText={handlePasswordChange}
-                style={styles.input}
-                secureTextEntry={!showPassword}
-                autoComplete={isSignUp ? 'password-new' : 'password'}
-                textContentType={isSignUp ? 'newPassword' : 'password'}
-                error={!!passwordError}
-                disabled={loading}
-                outlineStyle={styles.inputOutline}
-                activeOutlineColor="#10B981"
-                left={
-                  <TextInput.Icon
-                    icon={() => (
-                      <MaterialIcons
-                        name="lock"
-                        size={24}
-                        color={passwordError ? '#EF4444' : '#718096'}
-                      />
-                    )}
-                  />
-                }
-                right={
-                  <TextInput.Icon
-                    icon={() => (
-                      <MaterialIcons
-                        name={showPassword ? 'visibility' : 'visibility-off'}
-                        size={24}
-                        color="#718096"
-                      />
-                    )}
-                    onPress={() => setShowPassword(!showPassword)}
-                  />
-                }
-              />
-              {passwordError ? (
-                <Text style={styles.errorText}>{passwordError}</Text>
-              ) : null}
-            </View>
-
-            {/* Forgot Password Link (only for sign in) */}
-            {!isSignUp && (
-              <TouchableOpacity
-                onPress={() => Alert.alert('Info', 'Password reset feature coming soon!')}
-                style={styles.forgotPasswordContainer}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header Section */}
+          <View style={styles.header}>
+            <View style={styles.logoContainer}>
+              <LinearGradient
+                colors={['#10B981', '#059669']}
+                style={styles.logoGradient}
               >
-                <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Auth Button */}
-            <Button
-              mode="contained"
-              onPress={handleAuth}
-              loading={loading}
-              disabled={loading}
-              style={styles.authButton}
-              contentStyle={styles.authButtonContent}
-              labelStyle={styles.authButtonLabel}
-            >
-              {isSignUp ? 'Create Account' : 'Sign In'}
-            </Button>
-
-            {/* Divider */}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
+                <MaterialIcons name="handshake" size={48} color="#FFFFFF" />
+              </LinearGradient>
             </View>
+            
+            <Text variant="displaySmall" style={styles.title}>
+              RozgarConnect
+            </Text>
+            <Text variant="bodyLarge" style={styles.subtitle}>
+              Connect with local work opportunities
+            </Text>
+          </View>
 
-            {/* Switch Auth Mode Button */}
-            <Button
-              mode="text"
-              onPress={toggleAuthMode}
-              disabled={loading}
-              style={styles.switchButton}
-              contentStyle={styles.switchButtonContent}
-              labelStyle={styles.switchButtonLabel}
-            >
-              {isSignUp
-                ? 'Already have an account? Sign In'
-                : "Don't have an account? Sign Up"}
-            </Button>
-          </Card.Content>
-        </Card>
+          {/* Clean Modern Form Card */}
+          <View style={styles.formCard}>
+            <BlurView intensity={20} tint="light" style={styles.cardBlur}>
+              <View style={styles.cardContent}>
+                <Text variant="headlineMedium" style={styles.formTitle}>
+                  {isSignUp ? 'Create Account' : 'Welcome Back'}
+                </Text>
+                <Text variant="bodyMedium" style={styles.formSubtitle}>
+                  {isSignUp
+                    ? 'Sign up to start connecting with opportunities'
+                    : 'Sign in to continue your journey'}
+                </Text>
 
-        {/* Footer */}
-        <Text style={styles.footerText}>
-          By continuing, you agree to our Terms of Service and Privacy Policy
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+                {/* Email Input */}
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    mode="outlined"
+                    label="Email"
+                    value={email}
+                    onChangeText={handleEmailChange}
+                    style={styles.input}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    error={!!emailError}
+                    disabled={loading}
+                    outlineColor="rgba(16, 185, 129, 0.2)"
+                    activeOutlineColor="#10B981"
+                    outlineStyle={styles.inputOutline}
+                    contentStyle={styles.inputContent}
+                    theme={{
+                      colors: {
+                        background: '#FFFFFF',
+                      },
+                    }}
+                    left={
+                      <TextInput.Icon
+                        icon={() => (
+                          <MaterialIcons
+                            name="email"
+                            size={22}
+                            color={emailError ? '#EF4444' : '#10B981'}
+                          />
+                        )}
+                      />
+                    }
+                  />
+                  {emailError ? (
+                    <Text style={styles.errorText}>{emailError}</Text>
+                  ) : null}
+                </View>
+
+                {/* Password Input */}
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    mode="outlined"
+                    label="Password"
+                    value={password}
+                    onChangeText={handlePasswordChange}
+                    style={styles.input}
+                    secureTextEntry={!showPassword}
+                    autoComplete={isSignUp ? 'password-new' : 'password'}
+                    textContentType={isSignUp ? 'newPassword' : 'password'}
+                    error={!!passwordError}
+                    disabled={loading}
+                    outlineColor="rgba(16, 185, 129, 0.2)"
+                    activeOutlineColor="#10B981"
+                    outlineStyle={styles.inputOutline}
+                    contentStyle={styles.inputContent}
+                    theme={{
+                      colors: {
+                        background: '#FFFFFF',
+                      },
+                    }}
+                    left={
+                      <TextInput.Icon
+                        icon={() => (
+                          <MaterialIcons
+                            name="lock"
+                            size={22}
+                            color={passwordError ? '#EF4444' : '#10B981'}
+                          />
+                        )}
+                      />
+                    }
+                    right={
+                      <TextInput.Icon
+                        icon={() => (
+                          <MaterialIcons
+                            name={showPassword ? 'visibility' : 'visibility-off'}
+                            size={22}
+                            color="#10B981"
+                          />
+                        )}
+                        onPress={() => setShowPassword(!showPassword)}
+                      />
+                    }
+                  />
+                  {passwordError ? (
+                    <Text style={styles.errorText}>{passwordError}</Text>
+                  ) : null}
+                </View>
+
+                {/* Forgot Password Link */}
+                {!isSignUp && (
+                  <TouchableOpacity
+                    onPress={() => Alert.alert('Info', 'Password reset feature coming soon!')}
+                    style={styles.forgotPasswordContainer}
+                  >
+                    <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Auth Button */}
+                <TouchableOpacity
+                  onPress={handleAuth}
+                  disabled={loading}
+                  activeOpacity={0.85}
+                  style={styles.authButtonContainer}
+                >
+                  <LinearGradient
+                    colors={['#10B981', '#059669']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.authButton}
+                  >
+                    <Text style={styles.authButtonText}>
+                      {loading ? 'Loading...' : isSignUp ? 'Create Account' : 'Sign In'}
+                    </Text>
+                    {!loading && (
+                      <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                {/* Divider */}
+                <View style={styles.divider}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>or</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                {/* Switch Auth Mode Button */}
+                <TouchableOpacity
+                  onPress={toggleAuthMode}
+                  disabled={loading}
+                  style={styles.switchButton}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.switchButtonText}>
+                    {isSignUp
+                      ? 'Already have an account? '
+                      : "Don't have an account? "}
+                    <Text style={styles.switchButtonTextBold}>
+                      {isSignUp ? 'Sign In' : 'Sign Up'}
+                    </Text>
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </BlurView>
+          </View>
+
+          {/* Footer */}
+          <Text style={styles.footerText}>
+            By continuing, you agree to our{' '}
+            <Text style={styles.footerLink}>Terms of Service</Text> and{' '}
+            <Text style={styles.footerLink}>Privacy Policy</Text>
+          </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7FAF9',
+  },
+  blurCircle: {
+    position: 'absolute',
+    borderRadius: 1000,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+  },
+  blurCircle1: {
+    width: 280,
+    height: 280,
+    top: -80,
+    right: -60,
+  },
+  blurCircle2: {
+    width: 220,
+    height: 220,
+    bottom: -40,
+    left: -50,
+  },
+  blurCircle3: {
+    width: 180,
+    height: 180,
+    top: height * 0.45,
+    right: -30,
+  },
+  keyboardView: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
-    paddingTop: Platform.OS === 'android' ? 60 : 40,
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? 60 : 50,
     paddingBottom: 40,
   },
   header: {
@@ -335,18 +411,22 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 30,
-    backgroundColor: '#D1FAE5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    elevation: 4,
+    width: 88,
+    height: 88,
+    borderRadius: 24,
+    overflow: 'hidden',
+    marginBottom: 16,
+    elevation: 8,
     shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
+  },
+  logoGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     textAlign: 'center',
@@ -359,20 +439,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#6B7280',
     lineHeight: 24,
-    paddingHorizontal: 20,
+    paddingHorizontal: 32,
   },
   formCard: {
-    borderRadius: 28,
-    backgroundColor: '#FFFFFF',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 20,
+    borderRadius: 24,
+    overflow: 'hidden',
     marginBottom: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.1)',
+    elevation: 4,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+  },
+  cardBlur: {
+    overflow: 'hidden',
   },
   cardContent: {
-    paddingVertical: 8,
+    padding: 24,
   },
   formTitle: {
     color: '#1F2937',
@@ -382,64 +468,74 @@ const styles = StyleSheet.create({
   },
   formSubtitle: {
     color: '#6B7280',
-    marginBottom: 28,
+    marginBottom: 24,
     textAlign: 'center',
     lineHeight: 22,
+    paddingHorizontal: 8,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   input: {
     backgroundColor: '#FFFFFF',
   },
   inputOutline: {
     borderRadius: 16,
-    borderWidth: 1.5,
+  },
+  inputContent: {
+    paddingLeft: 8,
   },
   errorText: {
     color: '#EF4444',
-    fontSize: 12,
+    fontSize: 13,
     marginTop: 6,
     marginLeft: 12,
     fontWeight: '500',
   },
   forgotPasswordContainer: {
     alignSelf: 'flex-end',
-    marginBottom: 24,
-    marginTop: -8,
+    marginBottom: 20,
+    marginTop: 4,
+    paddingVertical: 4,
   },
   forgotPasswordText: {
     color: '#10B981',
     fontSize: 14,
     fontWeight: '600',
   },
-  authButton: {
+  authButtonContainer: {
+    marginBottom: 4,
     borderRadius: 16,
-    backgroundColor: '#10B981',
-    marginTop: 8,
-    elevation: 3,
+    overflow: 'hidden',
+    elevation: 6,
     shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
   },
-  authButtonContent: {
-    paddingVertical: 10,
+  authButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    gap: 8,
   },
-  authButtonLabel: {
+  authButtonText: {
+    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     letterSpacing: 0.3,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 28,
+    marginVertical: 24,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
   },
   dividerText: {
     color: '#9CA3AF',
@@ -448,21 +544,29 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   switchButton: {
-    borderRadius: 16,
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
-  switchButtonContent: {
-    paddingVertical: 8,
-  },
-  switchButtonLabel: {
-    color: '#10B981',
+  switchButtonText: {
+    color: '#6B7280',
     fontSize: 15,
-    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  switchButtonTextBold: {
+    color: '#10B981',
+    fontWeight: '700',
   },
   footerText: {
     textAlign: 'center',
     color: '#9CA3AF',
     fontSize: 12,
     lineHeight: 18,
-    paddingHorizontal: 32,
+    paddingHorizontal: 40,
+  },
+  footerLink: {
+    color: '#10B981',
+    fontWeight: '600',
   },
 });
