@@ -7,9 +7,10 @@ import {
   TouchableOpacity, 
   Image,
   KeyboardAvoidingView,
-  Platform 
+  Platform,
+  Dimensions 
 } from 'react-native';
-import { Text, TextInput, Button, Card, ActivityIndicator } from 'react-native-paper';
+import { Text, TextInput, ActivityIndicator } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -17,6 +18,10 @@ import { supabase } from '@/lib/supabase';
 import { decode } from 'base64-arraybuffer';
 import { useAuth } from '@/hooks/useAuth';
 import { validateMobileNumber, sanitizeInput } from '@/utils/validation';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+
+const { height } = Dimensions.get('window');
 
 export default function EditProfileScreen() {
   const { profile, user, updateProfile } = useAuth();
@@ -82,7 +87,6 @@ export default function EditProfileScreen() {
 
       if (error) throw error;
 
-      // Delete old avatar if exists and is different
       if (currentAvatarUrl && currentAvatarUrl !== fileName) {
         try {
           await supabase.storage
@@ -102,7 +106,6 @@ export default function EditProfileScreen() {
   };
 
   const handleSave = async () => {
-    // Validation
     if (!fullName.trim() || !village.trim()) {
       Alert.alert('Validation Error', 'Please fill in all required fields');
       return;
@@ -120,10 +123,8 @@ export default function EditProfileScreen() {
 
     setLoading(true);
     try {
-      // Upload image first if changed
       const imageUrl = await uploadImage();
       
-      // Update profile in database
       const { error } = await supabase.from('profiles').upsert({
         id: user.id,
         full_name: sanitizeInput(fullName),
@@ -136,7 +137,6 @@ export default function EditProfileScreen() {
 
       if (error) throw error;
 
-      // Update auth context
       await updateProfile({
         full_name: fullName.trim(),
         village: village.trim(),
@@ -170,6 +170,17 @@ export default function EditProfileScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
+      {/* Background */}
+      <LinearGradient
+        colors={['#F0FDF4', '#DCFCE7', '#E8F5E9']}
+        style={StyleSheet.absoluteFillObject}
+      />
+      
+      {/* Subtle Blurred Accent Circles */}
+      <View style={[styles.blurCircle, styles.blurCircle1]} />
+      <View style={[styles.blurCircle, styles.blurCircle2]} />
+      <View style={[styles.blurCircle, styles.blurCircle3]} />
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -182,7 +193,9 @@ export default function EditProfileScreen() {
             style={styles.backButton}
             activeOpacity={0.7}
           >
-            <MaterialIcons name="arrow-back" size={24} color="#2D3748" />
+            <BlurView intensity={20} tint="light" style={styles.backButtonBlur}>
+              <MaterialIcons name="arrow-back" size={24} color="#10B981" />
+            </BlurView>
           </TouchableOpacity>
           <View style={styles.headerTextContainer}>
             <Text variant="headlineMedium" style={styles.title}>
@@ -194,199 +207,234 @@ export default function EditProfileScreen() {
           </View>
         </View>
 
-        {/* Form Card */}
-        <Card style={styles.formCard} elevation={4}>
-          <Card.Content>
-            <Text variant="titleMedium" style={styles.sectionTitle}>
-              Profile Photo
-            </Text>
-
-            {/* Profile Image Picker */}
-            <TouchableOpacity 
-              onPress={pickImage} 
-              style={styles.imagePickerContainer}
-              activeOpacity={0.7}
-              disabled={loading || uploadingImage}
+        {/* Profile Photo Section with Hybrid Design */}
+        <View style={styles.photoSection}>
+          <BlurView intensity={20} tint="light" style={styles.photoCard}>
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+              style={styles.photoCardGradient}
             >
-              {uploadingImage ? (
-                <View style={styles.imagePlaceholder}>
-                  <ActivityIndicator size="large" color="#6DD5A5" />
-                  <Text style={styles.imagePlaceholderText}>Loading...</Text>
-                </View>
-              ) : getImageUri() ? (
-                <View style={styles.imageWrapper}>
-                  <Image 
-                    source={{ uri: getImageUri() }} 
-                    style={styles.profileImage} 
-                  />
-                  <View style={styles.imageOverlay}>
-                    <MaterialIcons name="photo-camera" size={24} color="white" />
-                    <Text style={styles.changePhotoText}>Change</Text>
+              <View style={styles.imagePickerContainer}>
+                {uploadingImage ? (
+                  <View style={styles.imagePlaceholder}>
+                    <ActivityIndicator size="large" color="#10B981" />
+                    <Text style={styles.imagePlaceholderText}>Loading...</Text>
                   </View>
-                </View>
-              ) : (
-                <View style={styles.imagePlaceholder}>
-                  <MaterialIcons name="add-a-photo" size={40} color="#718096" />
-                  <Text style={styles.imagePlaceholderText}>Add Photo</Text>
-                </View>
-              )}
-            </TouchableOpacity>
+                ) : getImageUri() ? (
+                  <View style={styles.imageWrapper}>
+                    <Image 
+                      source={{ uri: getImageUri() }} 
+                      style={styles.profileImage} 
+                      resizeMode="cover"
+                    />
+                    <TouchableOpacity 
+                      onPress={pickImage}
+                      style={styles.editIconButton}
+                      activeOpacity={0.8}
+                      disabled={loading}
+                    >
+                      <LinearGradient
+                        colors={['#10B981', '#059669']}
+                        style={styles.editIconGradient}
+                      >
+                        <MaterialIcons name="photo-camera" size={18} color="white" />
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity 
+                    onPress={pickImage}
+                    style={styles.imagePlaceholder}
+                    activeOpacity={0.8}
+                    disabled={loading}
+                  >
+                    <View style={styles.placeholderIcon}>
+                      <MaterialIcons name="add-a-photo" size={32} color="#10B981" />
+                    </View>
+                    <Text style={styles.imagePlaceholderText}>Add Photo</Text>
+                    <Text style={styles.imagePlaceholderSubtext}>Tap to upload</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              
+              <Text style={styles.photoHint}>
+                Upload a clear photo of yourself
+              </Text>
+            </LinearGradient>
+          </BlurView>
+        </View>
 
-            <View style={styles.divider} />
-
-            {/* Basic Information Section */}
+        {/* Form Card with Hybrid Design */}
+        <BlurView intensity={20} tint="light" style={styles.formCard}>
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+            style={styles.formCardGradient}
+          >
             <Text variant="titleMedium" style={styles.sectionTitle}>
               Basic Information
             </Text>
 
-            {/* Full Name Input */}
-            <TextInput
-              mode="outlined"
-              label="Full Name *"
-              value={fullName}
-              onChangeText={setFullName}
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-              activeOutlineColor="#6DD5A5"
-              left={
-                <TextInput.Icon
-                  icon={() => <MaterialIcons name="person" size={24} color="#718096" />}
-                />
-              }
-              placeholder="Enter your full name"
-              autoCapitalize="words"
-              disabled={loading}
-              error={fullName.length > 0 && fullName.trim().length < 2}
-            />
-            {fullName.length > 0 && fullName.trim().length < 2 && (
-              <Text style={styles.errorText}>Name must be at least 2 characters</Text>
-            )}
+            {/* Full Name Input - Hybrid Style */}
+            <View style={styles.inputGroup}>
+              <View style={styles.inputLabelRow}>
+                <MaterialIcons name="person" size={18} color="#10B981" />
+                <Text style={styles.inputLabel}>Full Name *</Text>
+              </View>
+              <TextInput
+                mode="outlined"
+                value={fullName}
+                onChangeText={setFullName}
+                style={styles.input}
+                outlineStyle={styles.inputOutline}
+                activeOutlineColor="#10B981"
+                textColor="#1F2937"
+                placeholderTextColor="#9CA3AF"
+                placeholder="Enter your full name"
+                autoCapitalize="words"
+                disabled={loading}
+                error={fullName.length > 0 && fullName.trim().length < 2}
+              />
+              {fullName.length > 0 && fullName.trim().length < 2 && (
+                <Text style={styles.errorText}>Name must be at least 2 characters</Text>
+              )}
+            </View>
 
-            {/* Mobile Number Input */}
-            <TextInput
-              mode="outlined"
-              label="Mobile Number"
-              value={phone}
-              onChangeText={setPhone}
-              style={styles.input}
-              keyboardType="phone-pad"
-              maxLength={10}
-              outlineStyle={styles.inputOutline}
-              activeOutlineColor="#6DD5A5"
-              left={
-                <TextInput.Icon
-                  icon={() => <MaterialIcons name="phone" size={24} color="#718096" />}
-                />
-              }
-              placeholder="10-digit mobile number"
-              disabled={loading}
-              error={phone.length > 0 && !validateMobileNumber(phone)}
-            />
-            {phone.length > 0 && !validateMobileNumber(phone) && (
-              <Text style={styles.errorText}>Please enter a valid 10-digit number</Text>
-            )}
+            {/* Mobile Number Input - Hybrid Style */}
+            <View style={styles.inputGroup}>
+              <View style={styles.inputLabelRow}>
+                <MaterialIcons name="phone" size={18} color="#10B981" />
+                <Text style={styles.inputLabel}>Mobile Number</Text>
+              </View>
+              <TextInput
+                mode="outlined"
+                value={phone}
+                onChangeText={setPhone}
+                style={styles.input}
+                keyboardType="phone-pad"
+                maxLength={10}
+                outlineStyle={styles.inputOutline}
+                activeOutlineColor="#10B981"
+                textColor="#1F2937"
+                placeholderTextColor="#9CA3AF"
+                placeholder="10-digit mobile number"
+                disabled={loading}
+                error={phone.length > 0 && !validateMobileNumber(phone)}
+              />
+              {phone.length > 0 && !validateMobileNumber(phone) && (
+                <Text style={styles.errorText}>Please enter a valid 10-digit number</Text>
+              )}
+            </View>
 
-            {/* Village Input */}
-            <TextInput
-              mode="outlined"
-              label="Village/Town *"
-              value={village}
-              onChangeText={setVillage}
-              style={styles.input}
-              outlineStyle={styles.inputOutline}
-              activeOutlineColor="#6DD5A5"
-              left={
-                <TextInput.Icon
-                  icon={() => <MaterialIcons name="location-on" size={24} color="#718096" />}
-                />
-              }
-              placeholder="Enter your village or town"
-              autoCapitalize="words"
-              disabled={loading}
-            />
+            {/* Village Input - Hybrid Style */}
+            <View style={styles.inputGroup}>
+              <View style={styles.inputLabelRow}>
+                <MaterialIcons name="location-on" size={18} color="#10B981" />
+                <Text style={styles.inputLabel}>Village/Town *</Text>
+              </View>
+              <TextInput
+                mode="outlined"
+                value={village}
+                onChangeText={setVillage}
+                style={styles.input}
+                outlineStyle={styles.inputOutline}
+                activeOutlineColor="#10B981"
+                textColor="#1F2937"
+                placeholderTextColor="#9CA3AF"
+                placeholder="Enter your village or town"
+                autoCapitalize="words"
+                disabled={loading}
+              />
+            </View>
 
-            {/* Bio Input */}
-            <TextInput
-              mode="outlined"
-              label="Bio (Optional)"
-              value={bio}
-              onChangeText={setBio}
-              style={styles.bioInput}
-              multiline
-              numberOfLines={4}
-              outlineStyle={styles.inputOutline}
-              activeOutlineColor="#6DD5A5"
-              left={
-                <TextInput.Icon
-                  icon={() => <MaterialIcons name="description" size={24} color="#718096" />}
-                />
-              }
-              placeholder="Tell others about your skills and experience"
-              maxLength={500}
-              disabled={loading}
-            />
-
-            {/* Character count for bio */}
-            <Text style={styles.characterCount}>
-              {bio.length}/500 characters
-            </Text>
+            {/* Bio Input - Hybrid Style */}
+            <View style={styles.inputGroup}>
+              <View style={styles.inputLabelRow}>
+                <MaterialIcons name="description" size={18} color="#10B981" />
+                <Text style={styles.inputLabel}>Bio (Optional)</Text>
+              </View>
+              <TextInput
+                mode="outlined"
+                value={bio}
+                onChangeText={setBio}
+                style={[styles.input, styles.bioInput]}
+                multiline
+                numberOfLines={4}
+                outlineStyle={styles.inputOutline}
+                activeOutlineColor="#10B981"
+                textColor="#1F2937"
+                placeholderTextColor="#9CA3AF"
+                placeholder="Tell others about your skills and experience"
+                maxLength={500}
+                disabled={loading}
+              />
+              <Text style={styles.characterCount}>
+                {bio.length}/500 characters
+              </Text>
+            </View>
 
             {/* Role Display */}
-            <View style={styles.roleBox}>
-              <MaterialIcons 
-                name={profile?.role === 'worker' ? 'engineering' : 'business'} 
-                size={24} 
-                color="#6DD5A5" 
-              />
+            <BlurView intensity={15} tint="light" style={styles.roleBox}>
+              <View style={styles.roleIconContainer}>
+                <MaterialIcons 
+                  name={profile?.role === 'worker' ? 'engineering' : 'business'} 
+                  size={24} 
+                  color="#10B981" 
+                />
+              </View>
               <View style={styles.roleTextContainer}>
                 <Text style={styles.roleLabel}>Current Role</Text>
                 <Text style={styles.roleText}>
                   {profile?.role === 'worker' ? '👷‍♂️ Worker' : '🏢 Work Provider'}
                 </Text>
               </View>
-            </View>
+            </BlurView>
 
             {/* Info Box */}
-            <View style={styles.infoBox}>
-              <MaterialIcons name="info-outline" size={20} color="#3182CE" />
+            <BlurView intensity={15} tint="light" style={styles.infoBox}>
+              <View style={styles.infoIconContainer}>
+                <MaterialIcons name="info-outline" size={20} color="#3B82F6" />
+              </View>
               <Text style={styles.infoText}>
                 Fields marked with * are required. Your role cannot be changed.
               </Text>
-            </View>
+            </BlurView>
 
             {/* Action Buttons */}
             <View style={styles.buttonContainer}>
-              <Button
-                mode="outlined"
+              <TouchableOpacity
                 onPress={() => router.back()}
                 disabled={loading || uploadingImage}
-                style={styles.cancelButton}
-                contentStyle={styles.buttonContent}
-                labelStyle={styles.cancelButtonLabel}
+                style={[styles.cancelButtonWrapper, (loading || uploadingImage) && styles.buttonDisabled]}
+                activeOpacity={0.8}
               >
-                Cancel
-              </Button>
+                <BlurView intensity={20} tint="light" style={styles.cancelButton}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </BlurView>
+              </TouchableOpacity>
 
-              <Button
-                mode="contained"
+              <TouchableOpacity
                 onPress={handleSave}
-                loading={loading}
                 disabled={loading || uploadingImage || !fullName.trim() || !village.trim()}
-                style={[
-                  styles.saveButton,
-                  (!fullName.trim() || !village.trim()) && styles.saveButtonDisabled
-                ]}
-                contentStyle={styles.buttonContent}
-                labelStyle={styles.saveButtonLabel}
-                icon={({ size, color }) => (
-                  <MaterialIcons name="check" size={size} color={color} />
-                )}
+                style={[styles.saveButtonWrapper, (!fullName.trim() || !village.trim() || loading) && styles.buttonDisabled]}
+                activeOpacity={0.8}
               >
-                {loading ? 'Saving...' : 'Save Changes'}
-              </Button>
+                <LinearGradient
+                  colors={['#10B981', '#059669']}
+                  style={styles.saveButton}
+                >
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <MaterialIcons name="check" size={20} color="#FFFFFF" />
+                      <Text style={styles.saveButtonText}>Save Changes</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
             </View>
-          </Card.Content>
-        </Card>
+          </LinearGradient>
+        </BlurView>
 
         {/* Bottom spacing */}
         <View style={styles.bottomSpacing} />
@@ -398,7 +446,29 @@ export default function EditProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7FAFC',
+  },
+  blurCircle: {
+    position: 'absolute',
+    borderRadius: 1000,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+  },
+  blurCircle1: {
+    width: 280,
+    height: 280,
+    top: -80,
+    right: -60,
+  },
+  blurCircle2: {
+    width: 220,
+    height: 220,
+    bottom: 200,
+    left: -50,
+  },
+  blurCircle3: {
+    width: 180,
+    height: 180,
+    top: height * 0.5,
+    right: -30,
   },
   scrollContent: {
     flexGrow: 1,
@@ -406,199 +476,303 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingTop: 60,
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingBottom: 24,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
     flexDirection: 'row',
     alignItems: 'center',
   },
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F7FAFC',
+    marginRight: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  backButtonBlur: {
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   headerTextContainer: {
     flex: 1,
   },
   title: {
-    color: '#2D3748',
-    fontWeight: 'bold',
+    color: '#1F2937',
+    fontWeight: '700',
     marginBottom: 4,
   },
   subtitle: {
-    color: '#718096',
+    color: '#6B7280',
   },
-  formCard: {
-    margin: 20,
-    borderRadius: 24,
-    backgroundColor: '#FFFFFF',
-  },
-  sectionTitle: {
-    color: '#2D3748',
-    fontWeight: 'bold',
+  photoSection: {
+    paddingHorizontal: 24,
     marginBottom: 16,
+  },
+  photoCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.1)',
+    elevation: 2,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  photoCardGradient: {
+    padding: 24,
+    alignItems: 'center',
   },
   imagePickerContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    justifyContent: 'center',
+    marginBottom: 12,
   },
   imageWrapper: {
     position: 'relative',
   },
   profileImage: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
     borderWidth: 4,
-    borderColor: '#6DD5A5',
+    borderColor: '#10B981',
   },
-  imageOverlay: {
+  editIconButton: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 55,
-    justifyContent: 'center',
-    alignItems: 'center',
+    right: 0,
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
-  changePhotoText: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 4,
+  editIconGradient: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
   },
   imagePlaceholder: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: '#E2E8F0',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#CBD5E0',
+    borderColor: 'rgba(16, 185, 129, 0.3)',
     borderStyle: 'dashed',
   },
-  imagePlaceholderText: {
-    marginTop: 8,
-    fontSize: 13,
-    color: '#718096',
-    fontWeight: '600',
+  placeholderIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
-  divider: {
-    height: 1,
-    backgroundColor: '#E2E8F0',
-    marginVertical: 24,
+  imagePlaceholderText: {
+    fontSize: 14,
+    color: '#10B981',
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  imagePlaceholderSubtext: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  photoHint: {
+    fontSize: 13,
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  formCard: {
+    marginHorizontal: 24,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.1)',
+    elevation: 2,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  formCardGradient: {
+    padding: 24,
+  },
+  sectionTitle: {
+    color: '#1F2937',
+    fontWeight: '700',
+    marginBottom: 24,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 8,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
   },
   input: {
-    marginBottom: 4,
-    backgroundColor: '#FFFFFF',
-  },
-  bioInput: {
-    marginBottom: 4,
-    backgroundColor: '#FFFFFF',
-    minHeight: 100,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 15,
   },
   inputOutline: {
     borderRadius: 12,
-    borderColor: '#E2E8F0',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+    borderWidth: 1.5,
+  },
+  bioInput: {
+    minHeight: 100,
+    textAlignVertical: 'top',
   },
   errorText: {
-    color: '#E53E3E',
+    color: '#EF4444',
     fontSize: 12,
-    marginBottom: 12,
-    marginLeft: 12,
-    marginTop: 4,
+    marginTop: 6,
+    marginLeft: 4,
+    fontWeight: '500',
   },
   characterCount: {
     fontSize: 12,
-    color: '#A0AEC0',
+    color: '#9CA3AF',
     textAlign: 'right',
-    marginBottom: 20,
-    marginTop: 4,
+    marginTop: 6,
   },
   roleBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E8F7EF',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
     padding: 16,
+    borderRadius: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+    overflow: 'hidden',
+  },
+  roleIconContainer: {
+    width: 44,
+    height: 44,
     borderRadius: 12,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: '#6DD5A5',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
   roleTextContainer: {
-    marginLeft: 12,
     flex: 1,
   },
   roleLabel: {
     fontSize: 12,
-    color: '#718096',
+    color: '#6B7280',
     marginBottom: 4,
+    fontWeight: '500',
   },
   roleText: {
     fontSize: 16,
-    color: '#2D3748',
-    fontWeight: '600',
+    color: '#1F2937',
+    fontWeight: '700',
   },
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: '#EBF8FF',
-    padding: 12,
-    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    padding: 16,
+    borderRadius: 16,
     marginBottom: 24,
-    borderLeftWidth: 4,
-    borderLeftColor: '#3182CE',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.2)',
+    overflow: 'hidden',
+  },
+  infoIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+    flexShrink: 0,
   },
   infoText: {
     flex: 1,
-    marginLeft: 12,
-    color: '#2C5282',
+    color: '#1E40AF',
     fontSize: 13,
     lineHeight: 18,
+    fontWeight: '500',
   },
   buttonContainer: {
     flexDirection: 'row',
     gap: 12,
   },
-  buttonContent: {
-    paddingVertical: 8,
+  cancelButtonWrapper: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   cancelButton: {
-    flex: 1,
-    borderRadius: 12,
-    borderColor: '#CBD5E0',
-    borderWidth: 1.5,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+    minHeight: 56,
   },
-  cancelButtonLabel: {
+  cancelButtonText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#4A5568',
+    fontWeight: '700',
+    color: '#6B7280',
   },
-  saveButton: {
+  saveButtonWrapper: {
     flex: 1,
-    borderRadius: 12,
-    backgroundColor: '#6DD5A5',
-    elevation: 2,
-    shadowColor: '#6DD5A5',
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#10B981',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
   },
-  saveButtonDisabled: {
-    backgroundColor: '#CBD5E0',
-    elevation: 0,
+  saveButton: {
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 56,
   },
-  saveButtonLabel: {
+  saveButtonText: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
   },
   bottomSpacing: {
     height: 20,

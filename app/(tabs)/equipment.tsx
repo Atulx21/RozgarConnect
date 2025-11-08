@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
-import { Text, Card, Button, Chip, Searchbar, FAB } from 'react-native-paper';
-import { router } from 'expo-router';
+import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Dimensions } from 'react-native';
+import { Text, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useEquipment } from '@/hooks/useEquipment';
 import LoadingSpinner from '@/components/LoadingSpinner';
 import ErrorMessage from '@/components/ErrorMessage';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+
+const { height } = Dimensions.get('window');
 
 const EQUIPMENT_TYPES = ['Tractor', 'Water Pump', 'Thresher', 'Harvester', 'Plough', 'Other'];
 
@@ -46,23 +50,42 @@ export default function EquipmentScreen() {
   if (!user) {
     return (
       <View style={styles.container}>
+        <LinearGradient
+          colors={['#FAF5FF', '#F3E8FF', '#EDE9FE']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        
+        <View style={[styles.blurCircle, styles.blurCircle1]} />
+        <View style={[styles.blurCircle, styles.blurCircle2]} />
+
         <View style={styles.unauthState}>
-          <View style={styles.iconContainer}>
-            <MaterialIcons name="construction" size={48} color="#A78BFA" />
-          </View>
-          <Text variant="titleLarge" style={styles.unauthTitle}>
-            Login Required
-          </Text>
-          <Text variant="bodyMedium" style={styles.unauthText}>
-            Please log in to rent equipment
-          </Text>
-          <Button
-            mode="contained"
-            onPress={() => router.push('/auth/login')}
-            style={styles.loginButton}
-          >
-            Login
-          </Button>
+          <BlurView intensity={20} tint="light" style={styles.unauthCard}>
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+              style={styles.unauthCardGradient}
+            >
+              <View style={styles.iconContainer}>
+                <MaterialIcons name="construction" size={48} color="#A78BFA" />
+              </View>
+              <Text variant="titleLarge" style={styles.unauthTitle}>
+                Login Required
+              </Text>
+              <Text variant="bodyMedium" style={styles.unauthText}>
+                Please log in to rent equipment
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/auth/login')}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#A78BFA', '#8B5CF6']}
+                  style={styles.loginButton}
+                >
+                  <Text style={styles.loginButtonText}>Login</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </LinearGradient>
+          </BlurView>
         </View>
       </View>
     );
@@ -84,6 +107,18 @@ export default function EquipmentScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Background with Subtle Blurred Circles */}
+      <LinearGradient
+        colors={['#FAF5FF', '#F3E8FF', '#EDE9FE']}
+        style={StyleSheet.absoluteFillObject}
+      />
+      
+      {/* Subtle Blurred Accent Circles */}
+      <View style={[styles.blurCircle, styles.blurCircle1]} />
+      <View style={[styles.blurCircle, styles.blurCircle2]} />
+      <View style={[styles.blurCircle, styles.blurCircle3]} />
+
+      {/* Header Section */}
       <View style={styles.header}>
         <Text variant="headlineMedium" style={styles.title}>
           Rent Equipment
@@ -92,51 +127,83 @@ export default function EquipmentScreen() {
           Find tools and machinery for your needs
         </Text>
 
-        <Searchbar
-          placeholder="Search equipment, location..."
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          style={styles.searchBar}
-          iconColor="#A78BFA"
-          inputStyle={styles.searchInput}
-        />
+        {/* Search Bar with Blur */}
+        <BlurView intensity={20} tint="light" style={styles.searchBarContainer}>
+          <View style={styles.searchBarWrapper}>
+            <MaterialIcons name="search" size={22} color="#A78BFA" style={styles.searchIcon} />
+            <Searchbar
+              placeholder="Search equipment, location..."
+              onChangeText={setSearchQuery}
+              value={searchQuery}
+              style={styles.searchBar}
+              inputStyle={styles.searchInput}
+              iconColor="transparent"
+              elevation={0}
+            />
+          </View>
+        </BlurView>
 
+        {/* Types Chips */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.typesContainer}
           contentContainerStyle={styles.typesContent}
         >
-          <Chip
-            selected={selectedType === ''}
+          <TouchableOpacity
             onPress={() => setSelectedType('')}
-            style={[
-              styles.typeChip,
-              selectedType === '' && styles.typeChipSelected,
-            ]}
-            textStyle={selectedType === '' && styles.typeChipTextSelected}
-            icon={selectedType === '' ? 'check' : undefined}
+            activeOpacity={0.7}
           >
-            All
-          </Chip>
-          {EQUIPMENT_TYPES.map(type => (
-            <Chip
-              key={type}
-              selected={selectedType === type}
-              onPress={() => setSelectedType(type)}
+            <BlurView
+              intensity={selectedType === '' ? 30 : 15}
+              tint="light"
               style={[
                 styles.typeChip,
-                selectedType === type && styles.typeChipSelected,
+                selectedType === '' && styles.typeChipSelected,
               ]}
-              textStyle={selectedType === type && styles.typeChipTextSelected}
-              icon={selectedType === type ? 'check' : undefined}
             >
-              {type}
-            </Chip>
+              {selectedType === '' && (
+                <MaterialIcons name="check-circle" size={16} color="#A78BFA" style={styles.chipIcon} />
+              )}
+              <Text style={[
+                styles.typeChipText,
+                selectedType === '' && styles.typeChipTextSelected
+              ]}>
+                All
+              </Text>
+            </BlurView>
+          </TouchableOpacity>
+
+          {EQUIPMENT_TYPES.map(type => (
+            <TouchableOpacity
+              key={type}
+              onPress={() => setSelectedType(type)}
+              activeOpacity={0.7}
+            >
+              <BlurView
+                intensity={selectedType === type ? 30 : 15}
+                tint="light"
+                style={[
+                  styles.typeChip,
+                  selectedType === type && styles.typeChipSelected,
+                ]}
+              >
+                {selectedType === type && (
+                  <MaterialIcons name="check-circle" size={16} color="#A78BFA" style={styles.chipIcon} />
+                )}
+                <Text style={[
+                  styles.typeChipText,
+                  selectedType === type && styles.typeChipTextSelected
+                ]}>
+                  {type}
+                </Text>
+              </BlurView>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       </View>
 
+      {/* Equipment List */}
       <ScrollView
         style={styles.equipmentList}
         showsVerticalScrollIndicator={false}
@@ -145,132 +212,181 @@ export default function EquipmentScreen() {
         }
       >
         {filteredEquipment.map((item) => (
-          <Card key={item.id} style={styles.equipmentCard} mode="elevated">
-            <Card.Content>
-              <View style={styles.equipmentHeader}>
-                <View style={styles.equipmentTitleContainer}>
-                  <Text variant="titleMedium" style={styles.equipmentName}>
-                    {item.name}
-                  </Text>
-                  <View style={styles.typeBadge}>
-                    <Text style={styles.typeBadgeText}>{item.equipment_type}</Text>
-                  </View>
-                </View>
-              </View>
-
-              <Text variant="bodyMedium" style={styles.equipmentDescription} numberOfLines={2}>
-                {item.description}
-              </Text>
-
-              <View style={styles.equipmentDetails}>
-                <View style={styles.detailRow}>
-                  <MaterialIcons name="location-on" size={18} color="#718096" />
-                  <Text style={styles.detailText}>{item.location}</Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <MaterialIcons name="payments" size={18} color="#A78BFA" />
-                  <Text style={styles.priceText}>
-                    ₹{item.rental_price} {item.price_type === 'per_hour' ? '/hour' : '/day'}
-                  </Text>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <MaterialIcons name="event-available" size={18} color="#718096" />
-                  <Text style={styles.detailText}>
-                    {new Date(item.availability_start).toLocaleDateString()} - {new Date(item.availability_end).toLocaleDateString()}
-                  </Text>
-                </View>
-
-                {item.profiles && (
-                  <View style={styles.ownerInfo}>
-                    <View style={styles.ownerAvatar}>
-                      <MaterialIcons name="person" size={16} color="#A78BFA" />
-                    </View>
-                    <Text style={styles.ownerName}>{item.profiles.full_name}</Text>
-                    {item.profiles.rating > 0 && (
-                      <View style={styles.ratingBadge}>
-                        <MaterialIcons name="star" size={14} color="#FFA500" />
-                        <Text style={styles.ratingText}>{item.profiles.rating.toFixed(1)}</Text>
+          <TouchableOpacity
+            key={item.id}
+            activeOpacity={0.9}
+            onPress={() => router.push(`/equipment/${item.id}`)}
+          >
+            <BlurView intensity={20} tint="light" style={styles.equipmentCard}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+                style={styles.equipmentCardGradient}
+              >
+                <View style={styles.equipmentCardContent}>
+                  {/* Equipment Header */}
+                  <View style={styles.equipmentHeader}>
+                    <View style={styles.equipmentTitleContainer}>
+                      <Text variant="titleMedium" style={styles.equipmentName}>
+                        {item.name}
+                      </Text>
+                      <View style={styles.typeBadge}>
+                        <Text style={styles.typeBadgeText}>{item.equipment_type}</Text>
                       </View>
-                    )}
+                    </View>
                   </View>
-                )}
-              </View>
-            </Card.Content>
-            <Card.Actions style={styles.cardActions}>
-              <Button
-                mode="text"
-                onPress={() => router.push(`/equipment/${item.id}`)}
-                textColor="#A78BFA"
-              >
-                Details
-              </Button>
-              <Button
-                mode="contained"
-                onPress={() => router.push(`/equipment/${item.id}/book`)}
-                buttonColor="#A78BFA"
-                style={styles.bookButton}
-              >
-                Book Now
-              </Button>
-            </Card.Actions>
-          </Card>
+
+                  {/* Equipment Description */}
+                  <Text variant="bodyMedium" style={styles.equipmentDescription} numberOfLines={2}>
+                    {item.description}
+                  </Text>
+
+                  {/* Equipment Details */}
+                  <View style={styles.equipmentDetails}>
+                    <View style={styles.detailRow}>
+                      <View style={styles.detailIconContainer}>
+                        <MaterialIcons name="location-on" size={16} color="#A78BFA" />
+                      </View>
+                      <Text style={styles.detailText}>{item.location}</Text>
+                    </View>
+
+                    <View style={styles.detailRow}>
+                      <View style={styles.detailIconContainer}>
+                        <MaterialIcons name="payments" size={16} color="#A78BFA" />
+                      </View>
+                      <Text style={styles.priceText}>
+                        ₹{item.rental_price} {item.price_type === 'per_hour' ? '/hour' : '/day'}
+                      </Text>
+                    </View>
+
+                    <View style={styles.detailRow}>
+                      <View style={styles.detailIconContainer}>
+                        <MaterialIcons name="event-available" size={16} color="#A78BFA" />
+                      </View>
+                      <Text style={styles.detailText}>
+                        {new Date(item.availability_start).toLocaleDateString()} - {new Date(item.availability_end).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Owner Info */}
+                  {item.profiles && (
+                    <View style={styles.ownerInfo}>
+                      <View style={styles.ownerAvatar}>
+                        <MaterialIcons name="person" size={16} color="#A78BFA" />
+                      </View>
+                      <Text style={styles.ownerName}>{item.profiles.full_name}</Text>
+                      {item.profiles.rating > 0 && (
+                        <View style={styles.ratingBadge}>
+                          <MaterialIcons name="star" size={14} color="#FFA500" />
+                          <Text style={styles.ratingText}>{item.profiles.rating.toFixed(1)}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Action Buttons */}
+                  <View style={styles.actionButtons}>
+                    <TouchableOpacity
+                      style={styles.detailsButton}
+                      onPress={() => router.push(`/equipment/${item.id}`)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.detailsButtonText}>Details</Text>
+                      <MaterialIcons name="arrow-forward" size={18} color="#A78BFA" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => router.push(`/equipment/${item.id}/book`)}
+                      activeOpacity={0.8}
+                    >
+                      <LinearGradient
+                        colors={['#A78BFA', '#8B5CF6']}
+                        style={styles.bookButton}
+                      >
+                        <Text style={styles.bookButtonText}>Book Now</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </LinearGradient>
+            </BlurView>
+          </TouchableOpacity>
         ))}
 
+        {/* Empty State */}
         {filteredEquipment.length === 0 && !loading && (
-          <Card style={styles.emptyCard} mode="elevated">
-            <Card.Content style={styles.emptyContent}>
-              <MaterialIcons name="construction" size={64} color="#CBD5E0" />
-              <Text variant="titleLarge" style={styles.emptyTitle}>
-                No equipment found
-              </Text>
-              <Text variant="bodyMedium" style={styles.emptyText}>
-                {searchQuery || selectedType
-                  ? 'Try adjusting your search or filters'
-                  : 'No equipment available at the moment'}
-              </Text>
-              {(searchQuery || selectedType) && (
-                <Button
-                  mode="outlined"
-                  onPress={() => {
-                    setSearchQuery('');
-                    setSelectedType('');
-                  }}
-                  style={styles.clearButton}
-                >
-                  Clear Filters
-                </Button>
-              )}
-            </Card.Content>
-          </Card>
+          <BlurView intensity={20} tint="light" style={styles.emptyCard}>
+            <LinearGradient
+              colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+              style={styles.emptyCardGradient}
+            >
+              <View style={styles.emptyContent}>
+                <View style={styles.emptyIconContainer}>
+                  <MaterialIcons name="construction" size={48} color="#A78BFA" />
+                </View>
+                <Text variant="titleLarge" style={styles.emptyTitle}>
+                  No equipment found
+                </Text>
+                <Text variant="bodyMedium" style={styles.emptyText}>
+                  {searchQuery || selectedType
+                    ? 'Try adjusting your search or filters'
+                    : 'No equipment available at the moment'}
+                </Text>
+                {(searchQuery || selectedType) && (
+                  <TouchableOpacity
+                    onPress={() => {
+                      setSearchQuery('');
+                      setSelectedType('');
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={['#A78BFA', '#8B5CF6']}
+                      style={styles.clearButton}
+                    >
+                      <Text style={styles.clearButtonText}>Clear Filters</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </LinearGradient>
+          </BlurView>
         )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <View style={styles.bottomButtons}>
-        <Button
-          mode="outlined"
-          onPress={() => router.push('/equipment/my-equipment')}
-          style={styles.myEquipmentButton}
-          icon={({ size, color }) => (
-            <MaterialIcons name="list" size={size} color={color} />
-          )}
-        >
-          My Equipment
-        </Button>
-      </View>
+      {/* Bottom Left Button - My Equipment */}
+      <TouchableOpacity
+        style={styles.myEquipmentContainer}
+        onPress={() => router.push('/equipment/my-equipment')}
+        activeOpacity={0.85}
+      >
+        <BlurView intensity={30} tint="light" style={styles.myEquipmentButton}>
+          <LinearGradient
+            colors={['rgba(167, 139, 250, 0.2)', 'rgba(139, 92, 246, 0.2)']}
+            style={styles.myEquipmentGradient}
+          >
+            <MaterialIcons name="list" size={20} color="#A78BFA" />
+            <Text style={styles.myEquipmentText}>My Equipment</Text>
+          </LinearGradient>
+        </BlurView>
+      </TouchableOpacity>
 
-      <FAB
-        icon={({ size, color }) => (
-          <MaterialIcons name="add" size={size} color={color} />
-        )}
-        style={styles.fab}
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={styles.fabContainer}
         onPress={() => router.push('/equipment/add')}
-        label="List"
-        color="#FFFFFF"
-      />
+        activeOpacity={0.85}
+      >
+        <LinearGradient
+          colors={['#A78BFA', '#8B5CF6']}
+          style={styles.fab}
+        >
+          <MaterialIcons name="add" size={24} color="#FFFFFF" />
+          <Text style={styles.fabText}>List Equipment</Text>
+        </LinearGradient>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -278,139 +394,206 @@ export default function EquipmentScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9F9F9',
+  },
+  blurCircle: {
+    position: 'absolute',
+    borderRadius: 1000,
+    backgroundColor: 'rgba(167, 139, 250, 0.08)',
+  },
+  blurCircle1: {
+    width: 280,
+    height: 280,
+    top: -80,
+    right: -60,
+  },
+  blurCircle2: {
+    width: 220,
+    height: 220,
+    bottom: 100,
+    left: -50,
+  },
+  blurCircle3: {
+    width: 180,
+    height: 180,
+    top: height * 0.4,
+    right: -30,
   },
   header: {
-    padding: 24,
+    paddingHorizontal: 24,
     paddingTop: 60,
-    backgroundColor: '#FFFFFF',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    paddingBottom: 20,
   },
   title: {
-    color: '#2D3748',
-    fontWeight: 'bold',
+    color: '#1F2937',
+    fontWeight: '700',
     marginBottom: 4,
   },
   subtitle: {
-    color: '#718096',
+    color: '#6B7280',
     marginBottom: 20,
   },
-  searchBar: {
-    marginBottom: 16,
+  searchBarContainer: {
     borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.2)',
+  },
+  searchBarWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 16,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchBar: {
+    flex: 1,
+    backgroundColor: 'transparent',
     elevation: 0,
-    backgroundColor: '#F9F9F9',
   },
   searchInput: {
-    color: '#2D3748',
+    color: '#1F2937',
+    fontSize: 15,
   },
   typesContainer: {
     marginBottom: 8,
   },
   typesContent: {
     gap: 8,
+    paddingRight: 24,
   },
   typeChip: {
-    backgroundColor: '#F9F9F9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.1)',
   },
   typeChipSelected: {
-    backgroundColor: '#F3F0FF',
+    backgroundColor: 'rgba(167, 139, 250, 0.15)',
+    borderColor: 'rgba(167, 139, 250, 0.3)',
+  },
+  chipIcon: {
+    marginRight: 6,
+  },
+  typeChipText: {
+    color: '#6B7280',
+    fontSize: 14,
+    fontWeight: '500',
   },
   typeChipTextSelected: {
     color: '#A78BFA',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   equipmentList: {
     flex: 1,
-    padding: 24,
+    paddingHorizontal: 24,
   },
   equipmentCard: {
     marginBottom: 16,
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.1)',
+    elevation: 4,
+    shadowColor: '#A78BFA',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+  },
+  equipmentCardGradient: {
+    padding: 20,
+  },
+  equipmentCardContent: {
+    gap: 12,
   },
   equipmentHeader: {
-    marginBottom: 12,
+    marginBottom: 4,
   },
   equipmentTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 8,
+    gap: 12,
   },
   equipmentName: {
     flex: 1,
-    color: '#2D3748',
-    fontWeight: 'bold',
+    color: '#1F2937',
+    fontWeight: '700',
   },
   typeBadge: {
-    backgroundColor: '#F3F0FF',
+    backgroundColor: 'rgba(167, 139, 250, 0.15)',
     paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.2)',
   },
   typeBadgeText: {
     color: '#A78BFA',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'capitalize',
   },
   equipmentDescription: {
-    color: '#718096',
-    marginBottom: 16,
+    color: '#6B7280',
     lineHeight: 20,
   },
   equipmentDetails: {
-    gap: 10,
+    gap: 8,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
+  detailIconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(167, 139, 250, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   detailText: {
-    color: '#718096',
+    color: '#6B7280',
     fontSize: 14,
+    flex: 1,
   },
   priceText: {
     color: '#A78BFA',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
+    flex: 1,
   },
   ownerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 8,
+    gap: 10,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: 'rgba(167, 139, 250, 0.1)',
   },
   ownerAvatar: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#F3F0FF',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(167, 139, 250, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.2)',
   },
   ownerName: {
-    color: '#2D3748',
-    fontSize: 13,
-    fontWeight: '500',
+    color: '#1F2937',
+    fontSize: 14,
+    fontWeight: '600',
     flex: 1,
   },
   ratingBadge: {
@@ -425,41 +608,99 @@ const styles = StyleSheet.create({
   ratingText: {
     color: '#FFA500',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-  cardActions: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(167, 139, 250, 0.1)',
+    marginTop: 4,
+  },
+  detailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(167, 139, 250, 0.1)',
+  },
+  detailsButtonText: {
+    color: '#A78BFA',
+    fontSize: 14,
+    fontWeight: '700',
   },
   bookButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#A78BFA',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  bookButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   emptyCard: {
     borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    elevation: 1,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.1)',
     marginTop: 40,
+  },
+  emptyCardGradient: {
+    padding: 40,
   },
   emptyContent: {
     alignItems: 'center',
-    paddingVertical: 48,
+  },
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(167, 139, 250, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   emptyTitle: {
-    color: '#2D3748',
-    fontWeight: 'bold',
-    marginTop: 16,
+    color: '#1F2937',
+    fontWeight: '700',
     marginBottom: 8,
   },
   emptyText: {
-    color: '#718096',
+    color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+    paddingHorizontal: 20,
   },
   clearButton: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 16,
-    borderColor: '#A78BFA',
-    marginTop: 8,
+    elevation: 4,
+    shadowColor: '#A78BFA',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  clearButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   unauthState: {
     flex: 1,
@@ -467,49 +708,108 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
+  unauthCard: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.2)',
+  },
+  unauthCardGradient: {
+    padding: 40,
+    alignItems: 'center',
+  },
   iconContainer: {
     width: 96,
     height: 96,
-    borderRadius: 28,
-    backgroundColor: '#F3F0FF',
+    borderRadius: 48,
+    backgroundColor: 'rgba(167, 139, 250, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.2)',
   },
   unauthTitle: {
-    color: '#2D3748',
-    fontWeight: 'bold',
+    color: '#1F2937',
+    fontWeight: '700',
     marginBottom: 8,
   },
   unauthText: {
-    color: '#718096',
+    color: '#6B7280',
     marginBottom: 24,
     textAlign: 'center',
   },
   loginButton: {
-    borderRadius: 20,
-    backgroundColor: '#6DD5A5',
-  },
-  bottomButtons: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-  },
-  myEquipmentButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 14,
     borderRadius: 16,
-    borderColor: '#A78BFA',
-  },
-  fab: {
-    position: 'absolute',
-    margin: 20,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#A78BFA',
-    borderRadius: 20,
     elevation: 4,
     shadowColor: '#A78BFA',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
+  },
+  loginButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  myEquipmentContainer: {
+    position: 'absolute',
+    bottom: 24,
+    left: 24,
+    borderRadius: 16,
+    overflow: 'hidden',
+    elevation: 6,
+    shadowColor: '#A78BFA',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+  },
+  myEquipmentButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.2)',
+  },
+  myEquipmentGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  myEquipmentText: {
+    color: '#A78BFA',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  fabContainer: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    borderRadius: 20,
+    overflow: 'hidden',
+    elevation: 8,
+    shadowColor: '#A78BFA',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+  },
+  fab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    gap: 8,
+  },
+  fabText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
