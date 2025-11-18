@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Dimensions } from 'react-native';
-import { Text, Searchbar, FAB, Chip } from 'react-native-paper';
+import { Text, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
@@ -20,19 +20,20 @@ export default function JobsScreen() {
   const [filteredJobs, setFilteredJobs] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     filterJobs();
   }, [jobs, searchQuery, selectedCategory]);
 
   const filterJobs = () => {
-    let filtered = jobs;
+    let filtered = [...jobs];
 
     if (searchQuery) {
       filtered = filtered.filter(job =>
-        job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        job.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        job.location.toLowerCase().includes(searchQuery.toLowerCase())
+        job.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        job.location?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -43,15 +44,27 @@ export default function JobsScreen() {
     setFilteredJobs(filtered);
   };
 
-  const onRefresh = () => {
-    refreshJobs();
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshJobs();
+    } catch (err) {
+      console.error('Error refreshing jobs:', err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('');
   };
 
   if (loading && jobs.length === 0) {
     return <LoadingSpinner message="Loading available jobs..." />;
   }
 
-  if (error) {
+  if (error && jobs.length === 0) {
     return (
       <ErrorMessage
         title="Unable to Load Jobs"
@@ -164,7 +177,12 @@ export default function JobsScreen() {
         style={styles.jobsList}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={onRefresh} colors={['#10B981']} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            colors={['#10B981']}
+            tintColor="#10B981"
+          />
         }
       >
         {filteredJobs.map((job) => (
@@ -276,10 +294,7 @@ export default function JobsScreen() {
                 </Text>
                 {(searchQuery || selectedCategory) && (
                   <TouchableOpacity
-                    onPress={() => {
-                      setSearchQuery('');
-                      setSelectedCategory('');
-                    }}
+                    onPress={handleClearFilters}
                     activeOpacity={0.8}
                   >
                     <LinearGradient
@@ -299,19 +314,21 @@ export default function JobsScreen() {
       </ScrollView>
 
       {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fabContainer}
-        onPress={() => router.push('/jobs/post')}
-        activeOpacity={0.85}
-      >
-        <LinearGradient
-          colors={['#10B981', '#059669']}
-          style={styles.fab}
+      {profile && (
+        <TouchableOpacity
+          style={styles.fabContainer}
+          onPress={() => router.push('/jobs/post')}
+          activeOpacity={0.85}
         >
-          <MaterialIcons name="add" size={24} color="#FFFFFF" />
-          <Text style={styles.fabText}>Post Job</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+          <LinearGradient
+            colors={['#10B981', '#059669']}
+            style={styles.fab}
+          >
+            <MaterialIcons name="add" size={24} color="#FFFFFF" />
+            <Text style={styles.fabText}>Post Job</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
