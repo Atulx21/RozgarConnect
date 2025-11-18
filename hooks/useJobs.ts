@@ -32,6 +32,8 @@ export function useJobs() {
       setLoading(true);
       setError(null);
       
+      const nowIso = new Date().toISOString();
+
       const { data, error: fetchError } = await supabase
         .from('jobs')
         .select(`
@@ -39,6 +41,8 @@ export function useJobs() {
           profiles:provider_id (*)
         `)
         .eq('status', 'open')
+        // Ensure we don't get jobs whose application_deadline has already passed
+        .gt('application_deadline', nowIso)
         .order('created_at', { ascending: false });
 
       if (fetchError) {

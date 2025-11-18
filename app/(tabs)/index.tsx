@@ -31,7 +31,16 @@ export default function HomeScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [notificationCount, setNotificationCount] = useState(0); // Add this line
 
-  const recentJobs = jobs.slice(0, 4);
+  // Keep a defensive filter here too in case other callers supply expired jobs
+  const recentJobs = jobs
+    .filter(job => {
+      if (!job) return false;
+      if (job.status && job.status !== 'open') return false;
+      if (!job.application_deadline) return true;
+      const deadline = new Date(job.application_deadline);
+      return deadline > new Date();
+    })
+    .slice(0, 4);
 
   useEffect(() => {
     const fetchNotificationCount = async () => {
