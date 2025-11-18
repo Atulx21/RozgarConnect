@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Platform } from 'react-native';
-import { Text, Card, Button, FAB, IconButton, Searchbar } from 'react-native-paper';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, StatusBar, RefreshControl } from 'react-native';
+import { Text, Card, Button, FAB, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { useJobs } from '@/hooks/useJobs';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '@/lib/supabase';
 
@@ -26,10 +25,11 @@ const getTimeAgo = (date: string) => {
 
 export default function HomeScreen() {
   const { user, profile } = useAuth();
-  const { jobs } = useJobs();
+  const { jobs, refreshJobs } = useJobs();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
-  const [notificationCount, setNotificationCount] = useState(0); // Add this line
+  const [notificationCount, setNotificationCount] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Keep a defensive filter here too in case other callers supply expired jobs
   const recentJobs = jobs
@@ -42,26 +42,74 @@ export default function HomeScreen() {
     })
     .slice(0, 4);
 
-  useEffect(() => {
-    const fetchNotificationCount = async () => {
-      if (!user) return;
+  const fetchNotificationCount = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('read', false);
       
-      try {
-        const { count } = await supabase
-          .from('notifications')
-          .select('*', { count: 'exact' })
-          .eq('user_id', user.id)
-          .eq('read', false);
-          
-        setNotificationCount(count || 0);
-      } catch (error) {
-        console.error('Error fetching notification count:', error);
-        setNotificationCount(0);
-      }
-    };
-
-    fetchNotificationCount();
+      if (error) throw error;
+      setNotificationCount(count || 0);
+    } catch (error) {
+      console.error('Error fetching notification count:', error);
+      setNotificationCount(0);
+    }
   }, [user]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      // Refresh jobs if the hook provides a refresh function
+      if (refreshJobs) {
+        await refreshJobs();
+      }
+      // Refresh notification count
+      await fetchNotificationCount();
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshJobs, fetchNotificationCount]);
+
+  useEffect(() => {
+    fetchNotificationCount();
+    
+    // Set up real-time subscription for notifications
+    if (user) {
+      const subscription = supabase
+        .channel('notifications_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.id}`,
+          },
+          () => {
+            fetchNotificationCount();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        subscription.unsubscribe();
+      };
+    }
+  }, [user, fetchNotificationCount]);
+
+  const handleSearchSubmit = useCallback(() => {
+    if (searchQuery.trim()) {
+      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    } else {
+      router.push('/search');
+    }
+  }, [searchQuery]);
 
   if (!user) {
     return (
@@ -71,7 +119,10 @@ export default function HomeScreen() {
           colors={['#F7F9FC', '#E8F7EF']}
           style={styles.unauthGradient}
         >
-          <ScrollView contentContainerStyle={styles.unauthContent}>
+          <ScrollView 
+            contentContainerStyle={styles.unauthContent}
+            showsVerticalScrollIndicator={false}
+          >
             <View style={styles.heroSection}>
               <View style={styles.logoContainer}>
                 <LinearGradient
@@ -98,7 +149,7 @@ export default function HomeScreen() {
                 ].map((feature, index) => (
                   <View key={index} style={styles.featureItem}>
                     <View style={styles.featureIconSmall}>
-                      <MaterialIcons name={feature.icon} size={18} color="#6DD5A5" />
+                      <MaterialIcons name={feature.icon as any} size={18} color="#6DD5A5" />
                     </View>
                     <Text style={styles.featureText}>{feature.text}</Text>
                   </View>
@@ -202,6 +253,15 @@ export default function HomeScreen() {
         style={styles.scrollView} 
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#6DD5A5']}
+            tintColor="#6DD5A5"
+            progressBackgroundColor="#FFFFFF"
+          />
+        }
       >
         {/* Quick Search Bar */}
         <View style={styles.searchContainer}>
@@ -209,8 +269,8 @@ export default function HomeScreen() {
             placeholder="Search jobs, equipment..."
             onChangeText={setSearchQuery}
             value={searchQuery}
-            onIconPress={() => router.push('/search')}
-            onSubmitEditing={() => router.push('/search')}
+            onIconPress={handleSearchSubmit}
+            onSubmitEditing={handleSearchSubmit}
             style={styles.searchBar}
             inputStyle={styles.searchInput}
             iconColor="#6DD5A5"
@@ -218,7 +278,6 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* Recent Opportunities */}
         {/* Latest Opportunities */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -271,7 +330,7 @@ export default function HomeScreen() {
                         <View style={styles.detailRow}>
                           <View style={styles.detailItem}>
                             <MaterialIcons name="location-on" size={16} color="#6B7280" />
-                            <Text style={styles.detailText}>{job.location}</Text>
+                            <Text style={styles.detailText} numberOfLines={1}>{job.location}</Text>
                           </View>
                           <View style={styles.detailItem}>
                             <MaterialIcons name="calendar-today" size={14} color="#6B7280" />
@@ -410,7 +469,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   unauthContent: {
-    flex: 1,
+    flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
   },
@@ -515,7 +574,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
-    overflow: 'hidden', // Add this to contain the bubbles
+    overflow: 'hidden',
   },
   headerTop: {
     flexDirection: 'row',
@@ -683,6 +742,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    marginRight: 8,
   },
   jobTitle: {
     color: '#1F2937',
@@ -694,6 +754,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   categoryText: {
     color: '#6DD5A5',
@@ -720,6 +783,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     fontSize: 13,
     fontWeight: '500',
+    flex: 1,
   },
   jobFooter: {
     flexDirection: 'row',
@@ -767,24 +831,6 @@ const styles = StyleSheet.create({
     color: '#6DD5A5',
     fontSize: 14,
     fontWeight: '700',
-  },
-  jobCardFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#F9FAFB',
-  },
-  timeStamp: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  timeText: {
-    color: '#9CA3AF',
-    fontSize: 11,
-    fontWeight: '500',
   },
   urgentBadge: {
     flexDirection: 'row',
@@ -910,7 +956,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 16,
   },
-  // New styles for the bubble effects
   bubbleOne: {
     position: 'absolute',
     width: 150,
