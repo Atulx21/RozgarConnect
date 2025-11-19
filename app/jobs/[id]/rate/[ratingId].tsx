@@ -1,16 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
-import { Text, Card, Button, TextInput, Avatar } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, Alert, ActivityIndicator, TouchableOpacity, Dimensions, TextInput as RNTextInput } from 'react-native';
+import { Text } from 'react-native-paper';
 import { useLocalSearchParams, router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+
+const { height } = Dimensions.get('window');
+
+interface Job {
+  id: string;
+  title: string;
+  location: string;
+  provider_id: string;
+  pay_amount: number;
+  pay_type: 'per_day' | 'total';
+  profiles: {
+    id: string;
+    full_name: string;
+    village: string;
+  };
+}
+
+interface RatedUser {
+  id: string;
+  full_name: string;
+  village: string;
+}
 
 export default function RateJobScreen() {
-  const { id } = useLocalSearchParams(); // job id
+  const { id } = useLocalSearchParams();
   const { user, profile } = useAuth();
-  const [job, setJob] = useState(null);
-  const [ratedUser, setRatedUser] = useState(null);
+  const [job, setJob] = useState<Job | null>(null);
+  const [ratedUser, setRatedUser] = useState<RatedUser | null>(null);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(true);
@@ -39,7 +63,7 @@ export default function RateJobScreen() {
         // Worker rates the provider
         setRatedUser(jobData.profiles);
       } else {
-        // Provider rates the worker - need to get the hired worker
+        // Provider rates the worker - get the hired worker
         const { data: applicationData, error: appError } = await supabase
           .from('applications')
           .select(`
@@ -62,13 +86,30 @@ export default function RateJobScreen() {
 
   const submitRating = async () => {
     if (rating === 0) {
-      Alert.alert('Error', 'Please select a rating');
+      Alert.alert('Rating Required', 'Please select a rating before submitting');
       return;
     }
 
+    if (!ratedUser || !user || !job) return;
+
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('ratings').insert({
+      // Check if rating already exists
+      const { data: existingRating } = await supabase
+        .from('ratings')
+        .select('id')
+        .eq('job_id', id)
+        .eq('rater_id', user.id)
+        .single();
+
+      if (existingRating) {
+        Alert.alert('Already Rated', 'You have already rated this job');
+        setSubmitting(false);
+        return;
+      }
+
+      // Insert the rating
+      const { error: ratingError } = await supabase.from('ratings').insert({
         job_id: id,
         rater_id: user.id,
         rated_id: ratedUser.id,
@@ -76,7 +117,7 @@ export default function RateJobScreen() {
         comment: comment.trim() || null,
       });
 
-      if (error) throw error;
+      if (ratingError) throw ratingError;
 
       // Update the rated user's average rating
       const { data: ratingsData, error: ratingsError } = await supabase
@@ -97,214 +138,619 @@ export default function RateJobScreen() {
         })
         .eq('id', ratedUser.id);
 
-      Alert.alert('Success', 'Rating submitted successfully!', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
-    } catch (error) {
+      // Mark job as completed if rater is the provider
+      if (user.id === job.provider_id) {
+        const { error: jobUpdateError } = await supabase
+          .from('jobs')
+          .update({ status: 'completed' })
+          .eq('id', id);
+
+        if (jobUpdateError) {
+          console.error('Error updating job status:', jobUpdateError);
+        }
+      }
+
+      Alert.alert(
+        '✅ Success', 
+        profile?.role === 'provider' 
+          ? 'Rating submitted and job completed successfully! Thank you for using our platform.'
+          : 'Rating submitted successfully! Thank you for your feedback.',
+        [
+          { 
+            text: 'OK', 
+            onPress: () => {
+              router.replace('/(tabs)/jobs');
+            }
+          }
+        ]
+      );
+    } catch (error: any) {
       console.error('Error submitting rating:', error);
-      Alert.alert('Error', 'Failed to submit rating');
+      if (error.code === '23505') {
+        Alert.alert('Already Rated', 'You have already submitted a rating for this job');
+      } else {
+        Alert.alert('Error', 'Failed to submit rating. Please try again.');
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const renderStarRating = () => {
-    const stars = [];
-    for (let i = 1; i <= 5; i++) {
-      stars.push(
-        <MaterialIcons
-          key={i}
-          name={i <= rating ? 'star' : 'star-border'}
-          size={40}
-          color="#ffc107"
-          onPress={() => setRating(i)}
-          style={styles.star}
-        />
-      );
+  const getRatingFeedback = (rating: number) => {
+    switch (rating) {
+      case 1: return { emoji: '😞', text: 'Poor', color: '#EF4444' };
+      case 2: return { emoji: '😕', text: 'Fair', color: '#F59E0B' };
+      case 3: return { emoji: '😊', text: 'Good', color: '#FCD34D' };
+      case 4: return { emoji: '😃', text: 'Very Good', color: '#10B981' };
+      case 5: return { emoji: '🌟', text: 'Excellent', color: '#059669' };
+      default: return { emoji: '', text: '', color: '#6B7280' };
     }
-    return stars;
   };
 
   if (loading) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text variant="headlineSmall" style={styles.title}>
-            Loading...
-          </Text>
-        </View>
+      <View style={styles.loadingContainer}>
+        <LinearGradient
+          colors={['#F0FDF4', '#DCFCE7', '#E8F5E9']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <View style={styles.blurCircle1} />
+        <View style={styles.blurCircle2} />
+        <ActivityIndicator size="large" color="#10B981" />
+        <Text style={styles.loadingText}>Loading...</Text>
       </View>
     );
   }
 
   if (!job || !ratedUser) {
     return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <Text variant="headlineSmall" style={styles.title}>
-            Job not found
-          </Text>
-        </View>
+      <View style={styles.loadingContainer}>
+        <LinearGradient
+          colors={['#F0FDF4', '#DCFCE7', '#E8F5E9']}
+          style={StyleSheet.absoluteFillObject}
+        />
+        <MaterialIcons name="error-outline" size={64} color="#10B981" />
+        <Text style={styles.errorText}>Job not found</Text>
+        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.8}>
+          <LinearGradient
+            colors={['#10B981', '#059669']}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </LinearGradient>
+        </TouchableOpacity>
       </View>
     );
   }
 
+  const isProvider = user?.id === job.provider_id;
+  const feedback = getRatingFeedback(rating);
+
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
+      <LinearGradient
+        colors={['#F0FDF4', '#DCFCE7', '#E8F5E9']}
+        style={StyleSheet.absoluteFillObject}
+      />
+      
+      <View style={styles.blurCircle1} />
+      <View style={styles.blurCircle2} />
+      <View style={styles.blurCircle3} />
+
       <View style={styles.header}>
-        <Button 
-          mode="text" 
+        <TouchableOpacity 
           onPress={() => router.back()}
-          icon="arrow-left"
-          style={styles.backButton}
+          activeOpacity={0.7}
+          style={styles.backButtonHeader}
         >
-          Back
-        </Button>
-        <Text variant="headlineSmall" style={styles.title}>
-          Rate Your Experience
+          <MaterialIcons name="arrow-back" size={24} color="#1F2937" />
+        </TouchableOpacity>
+        <Text variant="headlineMedium" style={styles.headerTitle}>
+          Rate Experience
         </Text>
+        <View style={styles.headerSpacer} />
       </View>
 
-      <Card style={styles.jobCard}>
-        <Card.Content>
-          <Text variant="titleMedium" style={styles.jobTitle}>
-            {job.title}
-          </Text>
-          <Text variant="bodyMedium" style={styles.jobLocation}>
-            📍 {job.location}
-          </Text>
-        </Card.Content>
-      </Card>
-
-      <Card style={styles.ratingCard}>
-        <Card.Content>
-          <View style={styles.userInfo}>
-            <Avatar.Text 
-              size={60} 
-              label={ratedUser.full_name.charAt(0).toUpperCase()}
-              style={styles.avatar}
-            />
-            <View style={styles.userDetails}>
-              <Text variant="titleMedium" style={styles.userName}>
-                Rate {ratedUser.full_name}
-              </Text>
-              <Text variant="bodyMedium" style={styles.userVillage}>
-                📍 {ratedUser.village}
+      <ScrollView 
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Job Summary Card */}
+        <BlurView intensity={20} tint="light" style={styles.jobCard}>
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+            style={styles.jobCardGradient}
+          >
+            <View style={styles.cardHeader}>
+              <MaterialIcons name="work" size={20} color="#10B981" />
+              <Text style={styles.cardHeaderText}>
+                {isProvider ? 'Job to Complete' : 'Job Completed'}
               </Text>
             </View>
-          </View>
+            <Text style={styles.jobTitle}>{job.title}</Text>
+            <View style={styles.jobMetaRow}>
+              <View style={styles.jobMetaItem}>
+                <MaterialIcons name="location-on" size={16} color="#6B7280" />
+                <Text style={styles.jobMetaText}>{job.location}</Text>
+              </View>
+              <View style={styles.jobMetaItem}>
+                <MaterialIcons name="payments" size={16} color="#10B981" />
+                <Text style={styles.payMetaText}>
+                  ₹{job.pay_amount} {job.pay_type === 'per_day' ? '/day' : 'total'}
+                </Text>
+              </View>
+            </View>
+          </LinearGradient>
+        </BlurView>
 
-          <Text variant="titleMedium" style={styles.ratingLabel}>
-            How was your experience?
-          </Text>
-
-          <View style={styles.starContainer}>
-            {renderStarRating()}
-          </View>
-
-          <TextInput
-            mode="outlined"
-            label="Comment (Optional)"
-            value={comment}
-            onChangeText={setComment}
-            multiline
-            numberOfLines={4}
-            style={styles.commentInput}
-            placeholder="Share your experience..."
-          />
-
-          <Button 
-            mode="contained" 
-            onPress={submitRating}
-            loading={submitting}
-            disabled={submitting || rating === 0}
-            style={styles.submitButton}
-            icon="send"
+        {/* Rating Card */}
+        <BlurView intensity={20} tint="light" style={styles.ratingCard}>
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
+            style={styles.ratingCardGradient}
           >
-            Submit Rating
-          </Button>
-        </Card.Content>
-      </Card>
-    </ScrollView>
+            {/* User Info */}
+            <View style={styles.userInfo}>
+              <View style={styles.userAvatar}>
+                <Text style={styles.userAvatarText}>
+                  {ratedUser.full_name.charAt(0).toUpperCase()}
+                </Text>
+              </View>
+
+              <View style={styles.userDetails}>
+                <Text style={styles.userName}>{ratedUser.full_name}</Text>
+                <View style={styles.userMetaRow}>
+                  <MaterialIcons name="location-on" size={14} color="#6B7280" />
+                  <Text style={styles.userVillage}>{ratedUser.village}</Text>
+                </View>
+                <View style={styles.roleBadge}>
+                  <Text style={styles.roleBadgeText}>
+                    {isProvider ? 'Worker' : 'Job Provider'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Rating Label */}
+            <Text style={styles.ratingLabel}>
+              How was your experience with {ratedUser.full_name.split(' ')[0]}?
+            </Text>
+
+            {/* Star Rating */}
+            <View style={styles.starContainer}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => setRating(star)}
+                  activeOpacity={0.7}
+                  style={styles.starButton}
+                >
+                  <View style={[
+                    styles.starWrapper,
+                    star <= rating && styles.starWrapperActive
+                  ]}>
+                    <MaterialIcons
+                      name={star <= rating ? 'star' : 'star-border'}
+                      size={40}
+                      color={star <= rating ? '#FFA500' : '#D1D5DB'}
+                    />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {rating > 0 && (
+              <View style={styles.feedbackContainer}>
+                <Text style={[styles.feedbackEmoji, { color: feedback.color }]}>
+                  {feedback.emoji}
+                </Text>
+                <Text style={[styles.feedbackText, { color: feedback.color }]}>
+                  {feedback.text}
+                </Text>
+              </View>
+            )}
+
+            {/* Comment Input */}
+            <View style={styles.commentSection}>
+              <Text style={styles.commentLabel}>
+                Share your feedback <Text style={styles.optionalText}>(Optional)</Text>
+              </Text>
+              <Text style={styles.commentHint}>
+                Help others by describing your experience
+              </Text>
+              <BlurView intensity={10} tint="light" style={styles.commentInputContainer}>
+                <RNTextInput
+                  value={comment}
+                  onChangeText={setComment}
+                  multiline
+                  numberOfLines={4}
+                  style={styles.commentInput}
+                  placeholder="What went well? What could be improved?"
+                  placeholderTextColor="#9CA3AF"
+                  textAlignVertical="top"
+                  maxLength={500}
+                />
+              </BlurView>
+              <Text style={styles.charCount}>{comment.length}/500</Text>
+            </View>
+
+            {/* Info Badge for Provider */}
+            {isProvider && (
+              <BlurView intensity={15} tint="light" style={styles.infoBadge}>
+                <MaterialIcons name="info" size={18} color="#10B981" />
+                <Text style={styles.infoBadgeText}>
+                  Job will be marked as completed after submitting this rating
+                </Text>
+              </BlurView>
+            )}
+
+            {/* Submit Button */}
+            <TouchableOpacity 
+              onPress={submitRating}
+              disabled={submitting || rating === 0}
+              activeOpacity={0.85}
+              style={styles.submitButtonWrapper}
+            >
+              <LinearGradient
+                colors={rating === 0 ? ['#9CA3AF', '#6B7280'] : ['#10B981', '#059669']}
+                style={styles.submitButton}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <MaterialIcons 
+                      name={isProvider ? "check-circle" : "send"} 
+                      size={20} 
+                      color="#FFFFFF" 
+                    />
+                    <Text style={styles.submitButtonText}>
+                      {isProvider ? 'Submit & Complete Job' : 'Submit Rating'}
+                    </Text>
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            {rating === 0 && (
+              <Text style={styles.warningText}>
+                Please select a rating before submitting
+              </Text>
+            )}
+          </LinearGradient>
+        </BlurView>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
+  container: { flex: 1 },
+  blurCircle1: {
+    position: 'absolute',
+    width: 280,
+    height: 280,
+    borderRadius: 1000,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    top: -80,
+    right: -60,
   },
-  header: {
-    paddingTop: 60,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+  blurCircle2: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 1000,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    bottom: 100,
+    left: -50,
+  },
+  blurCircle3: {
+    position: 'absolute',
+    width: 180,
+    height: 180,
+    borderRadius: 1000,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    top: height * 0.5,
+    right: -30,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingText: {
+    color: '#6B7280',
+    fontSize: 16,
+    marginTop: 8,
+  },
+  errorText: {
+    color: '#1F2937',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
   },
   backButton: {
-    alignSelf: 'flex-start',
-    marginBottom: 10,
+    marginTop: 20,
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 16,
   },
-  title: {
-    color: '#2e7d32',
-    fontWeight: 'bold',
+  backButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 20,
+  },
+  backButtonHeader: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  headerTitle: {
+    color: '#1F2937',
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
+  },
+  headerSpacer: { width: 40 },
+  scrollView: { flex: 1 },
+  scrollContent: { paddingHorizontal: 24 },
   jobCard: {
-    margin: 15,
-    elevation: 2,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.1)',
+    marginBottom: 16,
+    elevation: 4,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+  },
+  jobCardGradient: { padding: 20 },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  cardHeaderText: {
+    color: '#10B981',
+    fontSize: 14,
+    fontWeight: '700',
   },
   jobTitle: {
-    color: '#2e7d32',
-    fontWeight: 'bold',
-    marginBottom: 5,
+    color: '#1F2937',
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 12,
   },
-  jobLocation: {
-    color: '#666',
+  jobMetaRow: {
+    flexDirection: 'row',
+    gap: 16,
+    flexWrap: 'wrap',
+  },
+  jobMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  jobMetaText: {
+    color: '#6B7280',
+    fontSize: 14,
+  },
+  payMetaText: {
+    color: '#10B981',
+    fontSize: 14,
+    fontWeight: '700',
   },
   ratingCard: {
-    marginHorizontal: 15,
-    marginBottom: 15,
-    elevation: 2,
+    borderRadius: 24,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.1)',
+    elevation: 4,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+  },
+  ratingCardGradient: {
+    padding: 24,
   },
   userInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 30,
+    gap: 16,
+    marginBottom: 24,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(16, 185, 129, 0.1)',
   },
-  avatar: {
-    backgroundColor: '#4caf50',
-    marginRight: 15,
+  userAvatar: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  userAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '700',
   },
   userDetails: {
     flex: 1,
+    gap: 4,
   },
   userName: {
-    color: '#333',
-    fontWeight: 'bold',
+    color: '#1F2937',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  userMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   userVillage: {
-    color: '#666',
+    color: '#6B7280',
+    fontSize: 14,
+  },
+  roleBadge: {
+    backgroundColor: 'rgba(59, 130, 246, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
     marginTop: 4,
   },
+  roleBadgeText: {
+    color: '#3B82F6',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   ratingLabel: {
+    color: '#1F2937',
+    fontSize: 18,
+    fontWeight: '700',
     textAlign: 'center',
-    color: '#333',
-    marginBottom: 20,
+    marginBottom: 24,
+    lineHeight: 26,
   },
   starContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 30,
+    gap: 8,
+    marginBottom: 16,
   },
-  star: {
-    marginHorizontal: 5,
+  starButton: { padding: 4 },
+  starWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(229, 231, 235, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  starWrapperActive: {
+    backgroundColor: 'rgba(255, 165, 0, 0.1)',
+    borderColor: 'rgba(255, 165, 0, 0.3)',
+  },
+  feedbackContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+    gap: 8,
+  },
+  feedbackEmoji: {
+    fontSize: 40,
+  },
+  feedbackText: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  commentSection: { marginBottom: 20 },
+  commentLabel: {
+    color: '#1F2937',
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  commentHint: {
+    color: '#9CA3AF',
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  optionalText: {
+    color: '#9CA3AF',
+    fontWeight: '400',
+  },
+  commentInputContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+    minHeight: 120,
   },
   commentInput: {
-    marginBottom: 30,
+    padding: 16,
+    color: '#1F2937',
+    fontSize: 15,
+    minHeight: 120,
+    fontFamily: 'System',
   },
+  charCount: {
+    textAlign: 'right',
+    color: '#9CA3AF',
+    fontSize: 12,
+    marginTop: 6,
+  },
+  infoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+    marginBottom: 20,
+  },
+  infoBadgeText: {
+    flex: 1,
+    color: '#059669',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  submitButtonWrapper: { width: '100%' },
   submitButton: {
-    backgroundColor: '#4caf50',
-    paddingVertical: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    borderRadius: 16,
+    elevation: 6,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  warningText: {
+    textAlign: 'center',
+    color: '#EF4444',
+    fontSize: 13,
+    marginTop: 12,
+    fontWeight: '500',
   },
 });
