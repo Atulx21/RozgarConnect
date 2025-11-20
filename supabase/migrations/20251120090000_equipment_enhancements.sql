@@ -37,12 +37,19 @@ BEGIN
     FROM pg_constraint 
     WHERE conname = 'equipment_no_overlap'
   ) THEN
+    -- Ensure GiST operator classes for uuid are available
+    CREATE EXTENSION IF NOT EXISTS btree_gist;
+    
+    -- Recreate the exclusion constraint with explicit operator class for uuid
     ALTER TABLE public.equipment_bookings
-      ADD CONSTRAINT equipment_no_overlap
-      EXCLUDE USING gist (
-        equipment_id WITH =,
-        booking_period WITH &&
-      );
+        DROP CONSTRAINT IF EXISTS equipment_no_overlap;
+    
+    ALTER TABLE public.equipment_bookings
+        ADD CONSTRAINT equipment_no_overlap
+        EXCLUDE USING gist (
+            equipment_id gist_uuid_ops WITH =,
+            booking_period WITH &&  -- booking_period must be a daterange
+        );
   END IF;
 END $$;
 

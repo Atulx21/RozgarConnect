@@ -43,7 +43,8 @@ export default function JobApplicationsScreen() {
       setLoading(false);
       return;
     }
-    fetchApplications();
+    // Call the correct function to fetch job + applications
+    fetchJobAndApplications();
   }, [jobId]);
 
   const fetchJobAndApplications = async () => {

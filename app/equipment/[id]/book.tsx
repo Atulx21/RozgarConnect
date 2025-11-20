@@ -1,35 +1,180 @@
+// Top-level imports (add formatDate import)
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Text, Card, Button, TextInput, Divider, Avatar } from 'react-native-paper';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { formatDateForInput } from '@/utils/dateHelpers'; // <-- keep this import and REMOVE local duplicate
+
+// Add strong typing to fix "never" type errors
+type PriceType = 'per_hour' | 'per_day';
+
+interface OwnerProfile {
+  full_name: string;
+  village: string;
+  rating: number;
+  total_ratings: number;
+}
+
+interface Equipment {
+  id: string;
+  name: string;
+  equipment_type: string;
+  description: string;
+  rental_price: number;
+  price_type: PriceType;
+  location: string;
+  status: string;
+  availability_start: string;
+  availability_end: string;
+  owner_id: string;
+  created_at: string;
+  profiles: OwnerProfile;
+}
 
 export default function BookEquipmentScreen() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
-  const [equipment, setEquipment] = useState(null);
+  const [equipment, setEquipment] = useState<Equipment | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [totalAmount, setTotalAmount] = useState(0);
+  const [hours, setHours] = useState(''); // for per_hour
+  const [bookingLoading, setBookingLoading] = useState(false);
+  const [estimatedTotal, setEstimatedTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  // Add missing date picker toggles
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
   const [booking, setBooking] = useState(false);
 
+  const equipmentId = Array.isArray(id) ? id[0] : (id as string | undefined);
   useEffect(() => {
-    const { id } = useLocalSearchParams();
-    const equipmentId = Array.isArray(id) ? id[0] : (id as string | undefined);
-    useEffect(() => {
-      if (!equipmentId) {
-        setLoading(false);
+    if (!equipmentId) {
+      setLoading(false);
+      return;
+    }
+    fetchEquipmentDetails();
+  }, [equipmentId]);
+
+  // Remove calculateTotal useEffect; rely on estimatedTotal only
+  const [totalAmount, setTotalAmount] = useState(0);
+
+  // Recompute total estimate (used by the UI and booking validation)
+  useEffect(() => {
+    if (!equipment) return;
+    const price = Number(equipment.rental_price);
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (equipment.price_type === 'per_day') {
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start <= end) {
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const days = Math.floor((end.getTime() - start.getTime()) / msPerDay) + 1;
+        setEstimatedTotal(days * price);
+      } else {
+        setEstimatedTotal(null);
+      }
+    } else {
+      const h = Number(hours);
+      if (h > 0) {
+        setEstimatedTotal(h * price);
+      } else {
+        setEstimatedTotal(null);
+      }
+    }
+  }, [equipment, startDate, endDate, hours]);
+
+  const validateAndBook = async () => {
+    if (!user || !equipment) {
+      Alert.alert('Login required', 'Please log in to book equipment.');
+      return;
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      Alert.alert('Invalid dates', 'Please enter valid dates in YYYY-MM-DD format.');
+      return;
+    }
+    if (start > end) {
+      Alert.alert('Invalid period', 'Start date must be before end date.');
+      return;
+    }
+    if (equipment.price_type === 'per_hour') {
+      const h = Number(hours);
+      if (!h || h <= 0) {
+        Alert.alert('Invalid hours', 'Please enter the number of hours.');
         return;
       }
-      fetchEquipmentDetails();
-    }, [equipmentId]);
-  }, [id]);
+    }
 
-  useEffect(() => {
-    calculateTotal();
-  }, [startDate, endDate, equipment]);
+    setBookingLoading(true);
+    try {
+      const { data: existing, error: existingError } = await supabase
+        .from('equipment_bookings')
+        .select('start_date, end_date, status')
+        .eq('equipment_id', equipmentId)
+        .in('status', ['approved', 'pending']);
+
+      if (existingError) {
+        throw new Error(existingError.message);
+      }
+
+      const hasOverlap = (existing || []).some((b) => {
+        const bs = new Date(b.start_date);
+        const be = new Date(b.end_date);
+        return !(be < start || bs > end);
+      });
+
+      if (hasOverlap) {
+        Alert.alert('Unavailable', 'Selected dates overlap with an existing booking.');
+        setBookingLoading(false);
+        return;
+      }
+
+      const totalAmountToInsert = estimatedTotal || 0;
+      const { error } = await supabase
+        .from('equipment_bookings')
+        .insert({
+          equipment_id: equipmentId,
+          renter_id: user.id,
+          start_date: startDate,
+          end_date: endDate,
+          total_amount: totalAmountToInsert,
+          status: 'pending',
+        });
+
+      if (error) {
+        Alert.alert(
+          'Error',
+          error.message.includes('equipment_no_overlap')
+            ? 'Selected dates overlap with an existing booking.'
+            : `Failed to create booking: ${error.message}`
+        );
+        setBookingLoading(false);
+        return;
+      }
+
+      // Notify owner about new booking request (best-effort)
+      if (equipment.owner_id) {
+        await supabase.from('notifications').insert({
+          user_id: equipment.owner_id,
+          title: 'New Equipment Booking Request',
+          body: `You have a new booking request for ${equipment.name}.`,
+          read: false,
+        }).catch(() => {});
+      }
+
+      Alert.alert('Booking request sent', 'The owner will review your booking.');
+      router.push(`/equipment/${equipmentId}`);
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to create booking.');
+    } finally {
+      setBookingLoading(false);
+    }
+  };
 
   const fetchEquipmentDetails = async () => {
     try {
@@ -43,7 +188,7 @@ export default function BookEquipmentScreen() {
         .single();
 
       if (error) throw error;
-      setEquipment(data);
+      setEquipment(data as Equipment);
     } catch (error) {
       console.error('Error fetching equipment details:', error);
       Alert.alert('Error', 'Failed to load equipment details');
@@ -81,6 +226,15 @@ export default function BookEquipmentScreen() {
     if (new Date(startDate) >= new Date(endDate)) {
       Alert.alert('Error', 'End date must be after start date');
       return;
+    }
+
+    // Extra validation for per-hour bookings
+    if (equipment?.price_type === 'per_hour') {
+      const h = parseFloat(hours);
+      if (isNaN(h) || h <= 0) {
+        Alert.alert('Error', 'Please enter valid hours for per-hour booking');
+        return;
+      }
     }
 
     setBooking(true);
@@ -160,45 +314,87 @@ export default function BookEquipmentScreen() {
       <Card style={styles.bookingCard}>
         <Card.Content>
           <Text variant="titleMedium" style={styles.sectionTitle}>
-            Select Rental Period
+            Booking Details
           </Text>
-          
-          <TextInput
-            mode="outlined"
-            label="Start Date (YYYY-MM-DD)"
-            value={startDate}
-            onChangeText={setStartDate}
-            style={styles.input}
-            placeholder="2025-01-20"
-          />
-          
-          <TextInput
-            mode="outlined"
-            label="End Date (YYYY-MM-DD)"
-            value={endDate}
-            onChangeText={setEndDate}
-            style={styles.input}
-            placeholder="2025-01-22"
-          />
 
-          {totalAmount > 0 && (
-            <View style={styles.totalContainer}>
-              <Divider style={styles.divider} />
-              <Text variant="titleMedium" style={styles.totalText}>
-                Total Amount: ₹{totalAmount}
-              </Text>
-            </View>
+          <View style={{ flexDirection: 'row' }}>
+            <TextInput
+              mode="outlined"
+              label="Start Date"
+              value={startDate}
+              style={[styles.input, { flex: 1, marginRight: 8 }]}
+              editable={false}
+              placeholder="Select start date"
+              right={<TextInput.Icon icon="calendar" onPress={() => setShowStartPicker(true)} />}
+            />
+            <TextInput
+              mode="outlined"
+              label="End Date"
+              value={endDate}
+              style={[styles.input, { flex: 1 }]}
+              editable={false}
+              placeholder="Select end date"
+              right={<TextInput.Icon icon="calendar" onPress={() => setShowEndPicker(true)} />}
+            />
+          </View>
+
+          {showStartPicker && (
+            <DateTimePicker
+              value={startDate ? new Date(startDate) : new Date()}
+              mode="date"
+              display="calendar"
+              onChange={(event: DateTimePickerEvent, date?: Date) => {
+                setShowStartPicker(false);
+                if (event.type === 'set' && date) {
+                  setStartDate(formatDateForInput(date));
+                }
+              }}
+            />
           )}
 
-          <Button 
-            mode="contained" 
-            onPress={submitBooking}
-            loading={booking}
-            disabled={booking || totalAmount <= 0}
+          {showEndPicker && (
+            <DateTimePicker
+              value={endDate ? new Date(endDate) : new Date()}
+              mode="date"
+              display="calendar"
+              onChange={(event: DateTimePickerEvent, date?: Date) => {
+                setShowEndPicker(false);
+                if (event.type === 'set' && date) {
+                  setEndDate(formatDateForInput(date));
+                }
+              }}
+            />
+          )}
+
+          {/* Hours input, divider, totals, and buttons remain unchanged */}
+          {equipment?.price_type === 'per_hour' && (
+            <TextInput
+              mode="outlined"
+              label="Hours *"
+              value={hours}
+              onChangeText={setHours}
+              keyboardType="numeric"
+              style={styles.input}
+            />
+          )}
+
+          <Divider style={styles.divider} />
+
+          <View style={styles.totalContainer}>
+            <Text style={styles.totalText}>
+              Estimated Total: {estimatedTotal != null ? `₹${estimatedTotal}` : '—'}
+            </Text>
+          </View>
+
+          <Button
+            mode="contained"
+            onPress={validateAndBook}
+            loading={bookingLoading}
+            disabled={bookingLoading}
             style={styles.bookButton}
-            icon="calendar-check"
+            icon="calendar"
           >
-            Send Booking Request
+            Request Booking
           </Button>
         </Card.Content>
       </Card>
@@ -233,6 +429,7 @@ export default function BookEquipmentScreen() {
   );
 }
 
+// At the bottom of the file, keep styles and REMOVE the duplicate local formatDate
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -261,11 +458,9 @@ const styles = StyleSheet.create({
   equipmentName: {
     color: '#2e7d32',
     fontWeight: 'bold',
-    marginBottom: 5,
   },
   equipmentType: {
     color: '#666',
-    marginBottom: 4,
   },
   equipmentPrice: {
     color: '#4caf50',
@@ -282,19 +477,16 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   input: {
-    marginBottom: 15,
-  },
-  totalContainer: {
-    marginTop: 10,
+    marginBottom: 12,
   },
   divider: {
-    marginBottom: 15,
+    marginVertical: 20,
+  },
+  totalContainer: {
+    paddingVertical: 8,
   },
   totalText: {
-    color: '#4caf50',
     fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
   },
   bookButton: {
     backgroundColor: '#4caf50',
@@ -326,5 +518,6 @@ const styles = StyleSheet.create({
   },
   ownerRating: {
     color: '#666',
+    fontSize: 12,
   },
 });

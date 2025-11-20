@@ -11,6 +11,7 @@ export default function EquipmentDetailsScreen() {
   const { user, profile } = useAuth();
   const [equipment, setEquipment] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [bookings, setBookings] = useState<any[]>([]);
   const equipmentId = Array.isArray(id) ? id[0] : (id as string | undefined);
 
   useEffect(() => {
@@ -34,6 +35,17 @@ export default function EquipmentDetailsScreen() {
 
       if (error) throw error;
       setEquipment(data);
+
+      // Fetch bookings for this equipment
+      const { data: bookingData, error: bookingError } = await supabase
+        .from('equipment_bookings')
+        .select('id, start_date, end_date, total_amount, status')
+        .eq('equipment_id', equipmentId)
+        .order('start_date', { ascending: true });
+
+      if (!bookingError) {
+        setBookings(bookingData || []);
+      }
     } catch (error) {
       console.error('Error fetching equipment details:', error);
       Alert.alert('Error', 'Failed to load equipment details');
@@ -179,8 +191,8 @@ export default function EquipmentDetailsScreen() {
       </Card>
 
       {/* Actions */}
-      {equipment.owner_id !== user?.id && equipment.status === 'available' && (
-        <View style={styles.actionsContainer}>
+      <View style={styles.actionsContainer}>
+        {equipment.owner_id !== user?.id && equipment.status === 'available' && (
           <Button 
             mode="contained" 
             onPress={() => router.push(`/equipment/${equipment.id}/book`)}
@@ -189,8 +201,19 @@ export default function EquipmentDetailsScreen() {
           >
             Book This Equipment
           </Button>
-        </View>
-      )}
+        )}
+
+        {/* Message Owner */}
+        {equipment.owner_id !== user?.id && (
+          <Button
+            mode="outlined"
+            onPress={() => router.push(`/equipment/${equipment.id}/chat?recipientId=${equipment.owner_id}`)}
+            icon="message"
+          >
+            Message Owner
+          </Button>
+        )}
+      </View>
     </ScrollView>
   );
 }

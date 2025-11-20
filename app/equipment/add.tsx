@@ -1,9 +1,14 @@
+// Top-level imports (add formatDateForInput)
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Image } from 'react-native';
 import { Text, TextInput, Button, Card, Menu, Divider } from 'react-native-paper';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadEquipmentImages } from '@/hooks/useImageUpload';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { formatDateForInput } from '@/utils/dateHelpers';
 
 export default function AddEquipmentScreen() {
   const { user } = useAuth();
@@ -17,43 +22,110 @@ export default function AddEquipmentScreen() {
   const [availabilityEnd, setAvailabilityEnd] = useState('');
   const [loading, setLoading] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [picking, setPicking] = useState(false);
 
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
+
+  const formatDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
   const equipmentTypes = ['Tractor', 'Water Pump', 'Thresher', 'Harvester', 'Plough', 'Other'];
 
+  const pickImages = async () => {
+    try {
+      setPicking(true);
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'Please allow photo library access to upload equipment images.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsMultipleSelection: true,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 0.8,
+      });
+
+      if (!result.canceled) {
+        const uris = result.assets.map(a => a.uri);
+        setSelectedImages(prev => [...prev, ...uris]);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to pick images');
+    } finally {
+      setPicking(false);
+    }
+  };
+
   const addEquipment = async () => {
-    if (!name || !equipmentType || !description || !rentalPrice || !location || !availabilityStart || !availabilityEnd) {
-      Alert.alert('Error', 'Please fill in all required fields');
+    if (!user) {
+      Alert.alert('Login required', 'Please log in to add equipment.');
       return;
     }
 
-    if (!user) {
-      Alert.alert('Error', 'You must be logged in to add equipment');
+    // Basic validations
+    if (!name.trim() || !equipmentType.trim() || !description.trim() || !location.trim()) {
+      Alert.alert('Missing data', 'Please fill all required fields (Name, Type, Description, Location).');
+      return;
+    }
+    const price = parseFloat(rentalPrice);
+    if (isNaN(price) || price <= 0) {
+      Alert.alert('Invalid price', 'Please enter a valid rental price greater than 0.');
+      return;
+    }
+    if (!['per_hour', 'per_day'].includes(priceType)) {
+      Alert.alert('Invalid price type', 'Price type must be per_hour or per_day.');
+      return;
+    }
+    const start = new Date(availabilityStart);
+    const end = new Date(availabilityEnd);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      Alert.alert('Invalid dates', 'Please enter valid dates in YYYY-MM-DD format.');
+      return;
+    }
+    if (start > end) {
+      Alert.alert('Invalid period', 'Available From must be before Available Until.');
       return;
     }
 
     setLoading(true);
     try {
-      const { error } = await supabase.from('equipment').insert({
-        owner_id: user.id,
-        name: name.trim(),
-        equipment_type: equipmentType,
-        description: description.trim(),
-        rental_price: parseFloat(rentalPrice),
-        price_type: priceType,
-        location: location.trim(),
-        availability_start: availabilityStart,
-        availability_end: availabilityEnd,
-        status: 'available'
-      });
+      // Upload images if any
+      let photoPaths: string[] = [];
+      if (selectedImages.length > 0) {
+        const { paths } = await uploadEquipmentImages(selectedImages, user.id);
+        photoPaths = paths;
+      }
 
-      if (error) throw error;
+      const { error } = await supabase
+        .from('equipment')
+        .insert({
+          owner_id: user.id,
+          equipment_type: equipmentType,
+          name,
+          description,
+          photos: photoPaths,
+          rental_price: price,
+          price_type: priceType,
+          availability_start: availabilityStart,
+          availability_end: availabilityEnd,
+          location,
+          status: 'available',
+        });
 
-      Alert.alert('Success', 'Equipment added successfully!', [
-        { text: 'OK', onPress: () => router.back() }
-      ]);
-    } catch (error) {
-      console.error('Error adding equipment:', error);
-      Alert.alert('Error', 'Failed to add equipment');
+      if (error) {
+        Alert.alert('Error', `Failed to add equipment: ${error.message}`);
+        return;
+      }
+
+      Alert.alert('Success', 'Your equipment has been listed for rent.');
+      router.push('/equipment/my-equipment');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to add equipment.');
     } finally {
       setLoading(false);
     }
@@ -164,22 +236,73 @@ export default function AddEquipmentScreen() {
           <View style={styles.dateSection}>
             <TextInput
               mode="outlined"
-              label="Available From (YYYY-MM-DD) *"
+              label="Available From *"
               value={availabilityStart}
-              onChangeText={setAvailabilityStart}
               style={[styles.input, styles.dateInput]}
-              placeholder="2025-01-20"
+              editable={false}
+              placeholder="Select start date"
+              right={<TextInput.Icon icon="calendar" onPress={() => setShowStartPicker(true)} />}
             />
-            
             <TextInput
               mode="outlined"
-              label="Available Until (YYYY-MM-DD) *"
+              label="Available Until *"
               value={availabilityEnd}
-              onChangeText={setAvailabilityEnd}
               style={[styles.input, styles.dateInput]}
-              placeholder="2025-12-31"
+              editable={false}
+              placeholder="Select end date"
+              right={<TextInput.Icon icon="calendar" onPress={() => setShowEndPicker(true)} />}
             />
           </View>
+
+          {showStartPicker && (
+            <DateTimePicker
+              value={availabilityStart ? new Date(availabilityStart) : new Date()}
+              mode="date"
+              display="calendar"
+              onChange={(event: DateTimePickerEvent, date?: Date) => {
+                setShowStartPicker(false);
+                if (event.type === 'set' && date) {
+                  setAvailabilityStart(formatDateForInput(date));
+                }
+              }}
+            />
+          )}
+
+          {showEndPicker && (
+            <DateTimePicker
+              value={availabilityEnd ? new Date(availabilityEnd) : new Date()}
+              mode="date"
+              display="calendar"
+              onChange={(event: DateTimePickerEvent, date?: Date) => {
+                setShowEndPicker(false);
+                if (event.type === 'set' && date) {
+                  setAvailabilityEnd(formatDateForInput(date));
+                }
+              }}
+            />
+          )}
+
+          <Divider style={styles.divider} />
+
+          <Button
+            mode="outlined"
+            icon="image"
+            onPress={pickImages}
+            loading={picking}
+            style={styles.input}
+          >
+            Add Photos
+          </Button>
+
+          {selectedImages.length > 0 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+              {selectedImages.map((uri) => (
+                <View key={uri} style={{ marginRight: 8 }}>
+                  <Image source={{ uri }} style={{ width: 80, height: 80, borderRadius: 6 }} />
+                </View>
+              ))}
+            </ScrollView>
+          )}
 
           <Divider style={styles.divider} />
 

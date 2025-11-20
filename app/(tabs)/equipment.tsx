@@ -373,6 +373,22 @@ export default function EquipmentScreen() {
         </BlurView>
       </TouchableOpacity>
 
+      {/* Bottom Right Button - My Bookings */}
+      <TouchableOpacity
+        style={[styles.myEquipmentContainer, { right: 16, left: undefined }]}
+        onPress={() => router.push('/equipment/my-bookings')}
+        activeOpacity={0.85}
+      >
+        <BlurView intensity={30} tint="light" style={styles.myEquipmentButton}>
+          <LinearGradient
+            colors={['rgba(167, 139, 250, 0.2)', 'rgba(139, 92, 246, 0.2)']}
+            style={styles.myEquipmentGradient}
+          >
+            <MaterialIcons name="event" size={20} color="#A78BFA" />
+            <Text style={styles.myEquipmentText}>My Bookings</Text>
+          </LinearGradient>
+        </BlurView>
+      </TouchableOpacity>
       {/* Floating Action Button */}
       <TouchableOpacity
         style={styles.fabContainer}
