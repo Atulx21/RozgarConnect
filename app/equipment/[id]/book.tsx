@@ -16,7 +16,15 @@ export default function BookEquipmentScreen() {
   const [booking, setBooking] = useState(false);
 
   useEffect(() => {
-    fetchEquipmentDetails();
+    const { id } = useLocalSearchParams();
+    const equipmentId = Array.isArray(id) ? id[0] : (id as string | undefined);
+    useEffect(() => {
+      if (!equipmentId) {
+        setLoading(false);
+        return;
+      }
+      fetchEquipmentDetails();
+    }, [equipmentId]);
   }, [id]);
 
   useEffect(() => {
@@ -31,7 +39,7 @@ export default function BookEquipmentScreen() {
           *,
           profiles:owner_id (*)
         `)
-        .eq('id', id)
+        .eq('id', equipmentId)
         .single();
 
       if (error) throw error;
@@ -78,7 +86,7 @@ export default function BookEquipmentScreen() {
     setBooking(true);
     try {
       const { error } = await supabase.from('equipment_bookings').insert({
-        equipment_id: id,
+        equipment_id: equipmentId,
         renter_id: user.id,
         start_date: startDate,
         end_date: endDate,

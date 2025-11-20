@@ -11,10 +11,15 @@ export default function EquipmentDetailsScreen() {
   const { user, profile } = useAuth();
   const [equipment, setEquipment] = useState(null);
   const [loading, setLoading] = useState(true);
+  const equipmentId = Array.isArray(id) ? id[0] : (id as string | undefined);
 
   useEffect(() => {
+    if (!equipmentId) {
+      setLoading(false);
+      return;
+    }
     fetchEquipmentDetails();
-  }, [id]);
+  }, [equipmentId]);
 
   const fetchEquipmentDetails = async () => {
     try {
@@ -24,7 +29,7 @@ export default function EquipmentDetailsScreen() {
           *,
           profiles:owner_id (*)
         `)
-        .eq('id', id)
+        .eq('id', equipmentId)
         .single();
 
       if (error) throw error;

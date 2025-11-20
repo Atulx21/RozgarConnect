@@ -30,6 +30,7 @@ interface Worker {
 
 export default function CompleteJobScreen() {
   const { id } = useLocalSearchParams();
+  const jobId = Array.isArray(id) ? id[0] : (id as string | undefined);
   const { user, profile } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [worker, setWorker] = useState<Worker | null>(null);
@@ -37,7 +38,7 @@ export default function CompleteJobScreen() {
 
   useEffect(() => {
     fetchJobDetails();
-  }, [id]);
+  }, [jobId]);
 
   const fetchJobDetails = async () => {
     try {
@@ -47,7 +48,7 @@ export default function CompleteJobScreen() {
           *,
           profiles:provider_id (*)
         `)
-        .eq('id', id)
+        .eq('id', jobId)
         .single();
 
       if (jobError) throw jobError;
@@ -59,7 +60,7 @@ export default function CompleteJobScreen() {
         .select(`
           profiles:worker_id (*)
         `)
-        .eq('job_id', id)
+        .eq('job_id', jobId)
         .eq('status', 'hired')
         .single();
 
@@ -118,7 +119,10 @@ export default function CompleteJobScreen() {
   const proceedToRating = () => {
     // Navigate directly to rating screen
     // Job will be marked as completed after rating is submitted
-    router.push(`/jobs/${id}/rate`);
+    const goToRate = () => {
+      if (!jobId) return;
+      router.push(`/jobs/${jobId}/rate`);
+    };
   };
 
   if (loading) {

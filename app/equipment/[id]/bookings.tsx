@@ -24,22 +24,26 @@ interface Booking {
 
 export default function EquipmentBookingsScreen() {
   const { id } = useLocalSearchParams();
+  const equipmentId = Array.isArray(id) ? id[0] : (id as string | undefined);
   const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [equipment, setEquipment] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!equipmentId) {
+      setLoading(false);
+      return;
+    }
     fetchEquipmentAndBookings();
-  }, [id]);
+  }, [equipmentId]);
 
   const fetchEquipmentAndBookings = async () => {
     try {
-      // Fetch equipment details
       const { data: equipmentData, error: equipmentError } = await supabase
         .from('equipment')
         .select('*')
-        .eq('id', id)
+        .eq('id', equipmentId)
         .single();
 
       if (equipmentError) throw equipmentError;
@@ -52,7 +56,7 @@ export default function EquipmentBookingsScreen() {
           *,
           profiles:renter_id (*)
         `)
-        .eq('equipment_id', id)
+        .eq('equipment_id', equipmentId)
         .order('created_at', { ascending: false });
 
       if (bookingsError) {

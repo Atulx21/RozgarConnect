@@ -32,6 +32,7 @@ interface RatedUser {
 
 export default function RateJobScreen() {
   const { id } = useLocalSearchParams();
+  const jobId = Array.isArray(id) ? id[0] : (id as string);
   const { user, profile } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [ratedUser, setRatedUser] = useState<RatedUser | null>(null);
@@ -42,7 +43,7 @@ export default function RateJobScreen() {
 
   useEffect(() => {
     fetchJobDetails();
-  }, [id]);
+  }, [jobId]);
 
   const fetchJobDetails = async () => {
     try {
@@ -52,7 +53,7 @@ export default function RateJobScreen() {
           *,
           profiles:provider_id (*)
         `)
-        .eq('id', id)
+        .eq('id', jobId)
         .single();
 
       if (jobError) throw jobError;
@@ -69,7 +70,7 @@ export default function RateJobScreen() {
           .select(`
             profiles:worker_id (*)
           `)
-          .eq('job_id', id)
+          .eq('job_id', jobId)
           .eq('status', 'hired')
           .single();
 
@@ -98,7 +99,7 @@ export default function RateJobScreen() {
       const { data: existingRating } = await supabase
         .from('ratings')
         .select('id')
-        .eq('job_id', id)
+        .eq('job_id', jobId)
         .eq('rater_id', user.id)
         .single();
 
@@ -110,7 +111,7 @@ export default function RateJobScreen() {
 
       // Insert the rating
       const { error: ratingError } = await supabase.from('ratings').insert({
-        job_id: id,
+        job_id: jobId,
         rater_id: user.id,
         rated_id: ratedUser.id,
         rating,
@@ -143,7 +144,7 @@ export default function RateJobScreen() {
         const { error: jobUpdateError } = await supabase
           .from('jobs')
           .update({ status: 'completed' })
-          .eq('id', id);
+          .eq('id', jobId);
 
         if (jobUpdateError) {
           console.error('Error updating job status:', jobUpdateError);
@@ -256,7 +257,7 @@ export default function RateJobScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Job Summary Card */}
+        {/* Job Summary */}
         <BlurView intensity={20} tint="light" style={styles.jobCard}>
           <LinearGradient
             colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
@@ -264,11 +265,11 @@ export default function RateJobScreen() {
           >
             <View style={styles.cardHeader}>
               <MaterialIcons name="work" size={20} color="#10B981" />
-              <Text style={styles.cardHeaderText}>
-                {isProvider ? 'Job to Complete' : 'Job Completed'}
-              </Text>
+              <Text style={styles.cardHeaderText}>Job Summary</Text>
             </View>
+
             <Text style={styles.jobTitle}>{job.title}</Text>
+
             <View style={styles.jobMetaRow}>
               <View style={styles.jobMetaItem}>
                 <MaterialIcons name="location-on" size={16} color="#6B7280" />
@@ -277,20 +278,19 @@ export default function RateJobScreen() {
               <View style={styles.jobMetaItem}>
                 <MaterialIcons name="payments" size={16} color="#10B981" />
                 <Text style={styles.payMetaText}>
-                  ₹{job.pay_amount} {job.pay_type === 'per_day' ? '/day' : 'total'}
+                  ₹{job.pay_amount} {job.pay_type === 'per_day' ? 'per day' : 'total'}
                 </Text>
               </View>
             </View>
           </LinearGradient>
         </BlurView>
 
-        {/* Rating Card */}
+        {/* User to Rate */}
         <BlurView intensity={20} tint="light" style={styles.ratingCard}>
           <LinearGradient
             colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)']}
             style={styles.ratingCardGradient}
           >
-            {/* User Info */}
             <View style={styles.userInfo}>
               <View style={styles.userAvatar}>
                 <Text style={styles.userAvatarText}>
@@ -301,127 +301,110 @@ export default function RateJobScreen() {
               <View style={styles.userDetails}>
                 <Text style={styles.userName}>{ratedUser.full_name}</Text>
                 <View style={styles.userMetaRow}>
-                  <MaterialIcons name="location-on" size={14} color="#6B7280" />
+                  <MaterialIcons name="location-on" size={16} color="#6B7280" />
                   <Text style={styles.userVillage}>{ratedUser.village}</Text>
                 </View>
+
                 <View style={styles.roleBadge}>
                   <Text style={styles.roleBadgeText}>
-                    {isProvider ? 'Worker' : 'Job Provider'}
+                    {profile?.role === 'worker' ? 'Job Provider' : 'Hired Worker'}
                   </Text>
                 </View>
               </View>
             </View>
 
-            {/* Rating Label */}
             <Text style={styles.ratingLabel}>
-              How was your experience with {ratedUser.full_name.split(' ')[0]}?
+              How was your experience {profile?.role === 'worker' ? 'with the provider' : 'with the worker'}?
             </Text>
 
-            {/* Star Rating */}
+            {/* Stars */}
             <View style={styles.starContainer}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <TouchableOpacity
-                  key={star}
-                  onPress={() => setRating(star)}
-                  activeOpacity={0.7}
+              {[1,2,3,4,5].map((value) => (
+                <TouchableOpacity 
+                  key={value} 
+                  onPress={() => setRating(value)} 
+                  activeOpacity={0.8}
                   style={styles.starButton}
                 >
                   <View style={[
                     styles.starWrapper,
-                    star <= rating && styles.starWrapperActive
+                    rating >= value && styles.starWrapperActive
                   ]}>
-                    <MaterialIcons
-                      name={star <= rating ? 'star' : 'star-border'}
-                      size={40}
-                      color={star <= rating ? '#FFA500' : '#D1D5DB'}
+                    <MaterialIcons 
+                      name={rating >= value ? 'star' : 'star-border'} 
+                      size={24} 
+                      color={rating >= value ? '#FFA500' : '#6B7280'} 
                     />
                   </View>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {rating > 0 && (
-              <View style={styles.feedbackContainer}>
-                <Text style={[styles.feedbackEmoji, { color: feedback.color }]}>
-                  {feedback.emoji}
-                </Text>
-                <Text style={[styles.feedbackText, { color: feedback.color }]}>
-                  {feedback.text}
+            {/* Feedback */}
+            <View style={styles.feedbackContainer}>
+              <Text style={[styles.feedbackText, { color: feedback.color }]}>
+                {feedback.emoji} {feedback.text}
+              </Text>
+            </View>
+
+            {/* Comment */}
+            <View style={styles.commentSection}>
+              <Text style={styles.commentLabel}>Write a comment <Text style={styles.optionalText}>(optional)</Text></Text>
+              <Text style={styles.commentHint}>Share more details about your experience to help others</Text>
+              <View style={styles.commentInputContainer}>
+                <RNTextInput
+                  value={comment}
+                  onChangeText={setComment}
+                  placeholder="Type your feedback here..."
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  style={styles.commentInput}
+                  maxLength={500}
+                />
+              </View>
+              <Text style={styles.charCount}>{comment.length}/500</Text>
+            </View>
+
+            {/* Info badge */}
+            {profile?.role === 'provider' && (
+              <View style={styles.infoBadge}>
+                <MaterialIcons name="info" size={20} color="#059669" />
+                <Text style={styles.infoBadgeText}>
+                  After submitting your rating, the job will be marked as completed automatically.
                 </Text>
               </View>
             )}
 
-            {/* Comment Input */}
-            <View style={styles.commentSection}>
-              <Text style={styles.commentLabel}>
-                Share your feedback <Text style={styles.optionalText}>(Optional)</Text>
-              </Text>
-              <Text style={styles.commentHint}>
-                Help others by describing your experience
-              </Text>
-              <BlurView intensity={10} tint="light" style={styles.commentInputContainer}>
-                <RNTextInput
-                  value={comment}
-                  onChangeText={setComment}
-                  multiline
-                  numberOfLines={4}
-                  style={styles.commentInput}
-                  placeholder="What went well? What could be improved?"
-                  placeholderTextColor="#9CA3AF"
-                  textAlignVertical="top"
-                  maxLength={500}
-                />
-              </BlurView>
-              <Text style={styles.charCount}>{comment.length}/500</Text>
-            </View>
-
-            {/* Info Badge for Provider */}
-            {isProvider && (
-              <BlurView intensity={15} tint="light" style={styles.infoBadge}>
-                <MaterialIcons name="info" size={18} color="#10B981" />
-                <Text style={styles.infoBadgeText}>
-                  Job will be marked as completed after submitting this rating
-                </Text>
-              </BlurView>
-            )}
-
-            {/* Submit Button */}
-            <TouchableOpacity 
-              onPress={submitRating}
-              disabled={submitting || rating === 0}
-              activeOpacity={0.85}
-              style={styles.submitButtonWrapper}
-            >
-              <LinearGradient
-                colors={rating === 0 ? ['#9CA3AF', '#6B7280'] : ['#10B981', '#059669']}
-                style={styles.submitButton}
+            {/* Submit */}
+            <View style={styles.submitButtonWrapper}>
+              <TouchableOpacity 
+                onPress={submitRating}
+                disabled={submitting}
+                activeOpacity={0.85}
               >
-                {submitting ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <MaterialIcons 
-                      name={isProvider ? "check-circle" : "send"} 
-                      size={20} 
-                      color="#FFFFFF" 
-                    />
-                    <Text style={styles.submitButtonText}>
-                      {isProvider ? 'Submit & Complete Job' : 'Submit Rating'}
-                    </Text>
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
+                <LinearGradient
+                  colors={['#10B981', '#059669']}
+                  style={styles.submitButton}
+                >
+                  {submitting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <MaterialIcons name="send" size={20} color="#FFFFFF" />
+                      <Text style={styles.submitButtonText}>Submit Rating</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
 
-            {rating === 0 && (
-              <Text style={styles.warningText}>
-                Please select a rating before submitting
-              </Text>
-            )}
+              {rating === 0 && (
+                <Text style={styles.warningText}>
+                  Please select a rating before submitting.
+                </Text>
+              )}
+            </View>
           </LinearGradient>
         </BlurView>
-
-        <View style={{ height: 40 }} />
       </ScrollView>
     </View>
   );
@@ -665,13 +648,8 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     gap: 8,
   },
-  feedbackEmoji: {
-    fontSize: 40,
-  },
-  feedbackText: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
+  feedbackEmoji: { fontSize: 40 },
+  feedbackText: { fontSize: 18, fontWeight: '700' },
   commentSection: { marginBottom: 20 },
   commentLabel: {
     color: '#1F2937',
@@ -679,15 +657,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 4,
   },
-  commentHint: {
-    color: '#9CA3AF',
-    fontSize: 13,
-    marginBottom: 12,
-  },
-  optionalText: {
-    color: '#9CA3AF',
-    fontWeight: '400',
-  },
+  commentHint: { color: '#9CA3AF', fontSize: 13, marginBottom: 12 },
+  optionalText: { color: '#9CA3AF', fontWeight: '400' },
   commentInputContainer: {
     borderRadius: 16,
     overflow: 'hidden',
@@ -741,11 +712,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 12,
   },
-  submitButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  submitButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
   warningText: {
     textAlign: 'center',
     color: '#EF4444',

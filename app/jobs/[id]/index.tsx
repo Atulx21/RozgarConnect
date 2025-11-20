@@ -35,6 +35,7 @@ interface Job {
 
 export default function JobDetailsScreen() {
   const { id } = useLocalSearchParams();
+  const jobId = Array.isArray(id) ? id[0] : (id as string | undefined);
   const { user } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [hasApplied, setHasApplied] = useState(false);
@@ -43,10 +44,12 @@ export default function JobDetailsScreen() {
   const [isCheckingStatus, setIsCheckingStatus] = useState(true);
 
   useEffect(() => {
-    if (id) {
-      fetchJobDetails();
+    if (!jobId) {
+      setLoading(false);
+      return;
     }
-  }, [id]);
+    fetchJobDetails();
+  }, [jobId]);
 
   useEffect(() => {
     if (id && user && job && user.id !== job.provider_id) {
@@ -64,7 +67,7 @@ export default function JobDetailsScreen() {
           *,
           profiles:provider_id (*)
         `)
-        .eq('id', id)
+        .eq('id', jobId)
         .single();
       if (error) throw error;
       setJob(data);

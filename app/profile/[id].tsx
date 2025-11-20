@@ -42,19 +42,24 @@ export default function UserProfileScreen() {
   const [ratings, setRatings] = useState<Rating[]>([]);
   const [skills, setSkills] = useState<UserSkill[]>([]);
   const [loading, setLoading] = useState(true);
+  const profileId = Array.isArray(id) ? id[0] : (id as string | undefined);
 
   useEffect(() => {
+    if (!profileId) {
+      setLoading(false);
+      return;
+    }
     fetchProfile();
     fetchRatings();
     fetchUserSkills();
-  }, [id]);
+  }, [profileId]);
 
   const fetchProfile = async () => {
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', id)
+        .eq('id', profileId)
         .single();
 
       if (error) throw error;
@@ -72,7 +77,7 @@ export default function UserProfileScreen() {
           *,
           rater:rater_id (full_name, village)
         `)
-        .eq('rated_id', id)
+        .eq('rated_id', profileId)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -90,7 +95,7 @@ export default function UserProfileScreen() {
       const { data, error } = await supabase
         .from('user_skills')
         .select('*')
-        .eq('user_id', id)
+        .eq('user_id', profileId)
         .order('is_verified', { ascending: false });
 
       if (error) {

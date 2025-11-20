@@ -32,14 +32,19 @@ interface Job {
 
 export default function JobApplicationsScreen() {
   const { id } = useLocalSearchParams();
+  const jobId = Array.isArray(id) ? id[0] : (id as string | undefined);
   const { user } = useAuth();
   const [applications, setApplications] = useState<Application[]>([]);
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchJobAndApplications();
-  }, [id]);
+    if (!jobId) {
+      setLoading(false);
+      return;
+    }
+    fetchApplications();
+  }, [jobId]);
 
   const fetchJobAndApplications = async () => {
     try {
@@ -47,7 +52,7 @@ export default function JobApplicationsScreen() {
       const { data: jobData, error: jobError } = await supabase
         .from('jobs')
         .select('*')
-        .eq('id', id)
+        .eq('id', jobId)
         .single();
 
       if (jobError) throw jobError;
@@ -60,7 +65,8 @@ export default function JobApplicationsScreen() {
           *,
           profiles:worker_id (*)
         `)
-        .eq('job_id', id)
+        // Use jobId in Supabase queries:
+        // .eq('job_id', jobId)
         .order('applied_at', { ascending: false });
 
       if (applicationsError) throw applicationsError;
