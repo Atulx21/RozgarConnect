@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
-interface Equipment {
+export interface Equipment {
   id: string;
   name: string;
   equipment_type: string;

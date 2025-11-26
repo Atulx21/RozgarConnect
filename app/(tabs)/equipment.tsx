@@ -1,5 +1,6 @@
+// Top-level imports
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Dimensions } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Dimensions, Image } from 'react-native';
 import { Text, Searchbar } from 'react-native-paper';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -9,6 +10,8 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import ErrorMessage from '@/components/ErrorMessage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import type { Equipment } from '@/hooks/useEquipment';
+import { supabase } from '@/lib/supabase';
 
 const { height } = Dimensions.get('window');
 
@@ -17,7 +20,7 @@ const EQUIPMENT_TYPES = ['Tractor', 'Water Pump', 'Thresher', 'Harvester', 'Plou
 export default function EquipmentScreen() {
   const { user, profile } = useAuth();
   const { equipment, loading, error, refreshEquipment } = useEquipment();
-  const [filteredEquipment, setFilteredEquipment] = useState([]);
+  const [filteredEquipment, setFilteredEquipment] = useState<Equipment[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('');
 
@@ -26,7 +29,7 @@ export default function EquipmentScreen() {
   }, [equipment, searchQuery, selectedType]);
 
   const filterEquipment = () => {
-    let filtered = equipment;
+    let filtered = equipment as Equipment[];
 
     if (searchQuery) {
       filtered = filtered.filter(item =>
@@ -223,6 +226,29 @@ export default function EquipmentScreen() {
                 style={styles.equipmentCardGradient}
               >
                 <View style={styles.equipmentCardContent}>
+
+                  {/* NEW: Equipment Image */}
+                  <View style={styles.imageContainer}>
+                    {item.photos && item.photos.length > 0 ? (
+                      <Image
+                        source={{
+                          uri: item.photos[0].startsWith('http')
+                            ? item.photos[0]
+                            : supabase.storage
+                                .from('equipment')
+                                .getPublicUrl(item.photos[0]).data.publicUrl,
+                        }}
+                        style={styles.image}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.noImage}>
+                        <MaterialIcons name="image-not-supported" size={28} color="#A78BFA" />
+                        <Text style={styles.noImageText}>No photo</Text>
+                      </View>
+                    )}
+                  </View>
+
                   {/* Equipment Header */}
                   <View style={styles.equipmentHeader}>
                     <View style={styles.equipmentTitleContainer}>
@@ -811,7 +837,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 8,
     shadowColor: '#A78BFA',
-    shadowOffset: { width: 0, height: 6 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
   },
@@ -827,5 +853,30 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  // NEW: image styles
+  imageContainer: {
+    width: '100%',
+    height: 160,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(167, 139, 250, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.15)',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  noImage: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noImageText: {
+    color: '#A78BFA',
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
