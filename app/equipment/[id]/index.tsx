@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Image } from 'react-native';
 import { Text, Card, Button, Chip, Divider, Avatar } from 'react-native-paper';
 import { useLocalSearchParams, router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -98,6 +98,11 @@ export default function EquipmentDetailsScreen() {
     );
   }
 
+  // compute primary image
+  const firstPhotoUrl = equipment?.photos?.[0]
+    ? supabase.storage.from('equipment').getPublicUrl(equipment.photos[0]).data.publicUrl
+    : null;
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -109,52 +114,60 @@ export default function EquipmentDetailsScreen() {
         >
           Back
         </Button>
+        <Text variant="headlineSmall" style={styles.title}>
+          {equipment?.name || 'Equipment Details'}
+        </Text>
       </View>
 
-      {/* Equipment Details Card */}
+      {firstPhotoUrl && (
+        <Image
+          source={{ uri: firstPhotoUrl }}
+          style={{ width: '100%', height: 220, borderRadius: 12, marginBottom: 12 }}
+          resizeMode="cover"
+        />
+      )}
+
       <Card style={styles.equipmentCard}>
         <Card.Content>
-          <View style={styles.equipmentHeader}>
-            <Text variant="headlineSmall" style={styles.equipmentName}>
-              {equipment.name}
-            </Text>
-            <Chip mode="outlined">{equipment.equipment_type}</Chip>
-          </View>
-
-          <Text variant="bodyLarge" style={styles.description}>
-            {equipment.description}
+          <Text variant="titleMedium" style={styles.equipmentName}>
+            {equipment.name}
           </Text>
-
-          <Divider style={styles.divider} />
-
-          <View style={styles.detailsGrid}>
-            <View style={styles.detailItem}>
-              <MaterialIcons name="location-on" size={20} color="#666" />
-              <Text style={styles.detailText}>{equipment.location}</Text>
-            </View>
-
-            <View style={styles.detailItem}>
-              <MaterialIcons name="attach-money" size={20} color="#4caf50" />
-              <Text style={[styles.detailText, styles.priceText]}>
-                ₹{equipment.rental_price} {equipment.price_type === 'per_hour' ? 'per hour' : 'per day'}
-              </Text>
-            </View>
-
-            <View style={styles.detailItem}>
-              <MaterialIcons name="date-range" size={20} color="#666" />
-              <Text style={styles.detailText}>
-                Available: {new Date(equipment.availability_start).toLocaleDateString()} - {new Date(equipment.availability_end).toLocaleDateString()}
-              </Text>
-            </View>
-
-            <View style={styles.detailItem}>
-              <MaterialIcons name="info" size={20} color="#666" />
-              <Text style={styles.detailText}>
-                Status: {equipment.status.charAt(0).toUpperCase() + equipment.status.slice(1)}
-              </Text>
-            </View>
-          </View>
+          <Chip mode="outlined">{equipment.equipment_type}</Chip>
         </Card.Content>
+
+        <Text variant="bodyLarge" style={styles.description}>
+          {equipment.description}
+        </Text>
+
+        <Divider style={styles.divider} />
+
+        <View style={styles.detailsGrid}>
+          <View style={styles.detailItem}>
+            <MaterialIcons name="location-on" size={20} color="#666" />
+            <Text style={styles.detailText}>{equipment.location}</Text>
+          </View>
+
+          <View style={styles.detailItem}>
+            <MaterialIcons name="attach-money" size={20} color="#4caf50" />
+            <Text style={[styles.detailText, styles.priceText]}>
+              ₹{equipment.rental_price} {equipment.price_type === 'per_hour' ? 'per hour' : 'per day'}
+            </Text>
+          </View>
+
+          <View style={styles.detailItem}>
+            <MaterialIcons name="date-range" size={20} color="#666" />
+            <Text style={styles.detailText}>
+              Available: {new Date(equipment.availability_start).toLocaleDateString()} - {new Date(equipment.availability_end).toLocaleDateString()}
+            </Text>
+          </View>
+
+          <View style={styles.detailItem}>
+            <MaterialIcons name="info" size={20} color="#666" />
+            <Text style={styles.detailText}>
+              Status: {equipment.status.charAt(0).toUpperCase() + equipment.status.slice(1)}
+            </Text>
+          </View>
+        </View>
       </Card>
 
       {/* Owner Details Card */}

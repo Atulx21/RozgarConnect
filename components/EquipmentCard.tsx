@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Image } from 'react-native';
 import { Card, Text, Button, Chip } from 'react-native-paper';
 import { router } from 'expo-router';
+import { supabase } from '@/lib/supabase';
 
 interface Equipment {
   id: string;
@@ -19,6 +20,7 @@ interface Equipment {
     village: string;
     rating: number;
   };
+  photos?: string[]; // added to show images
 }
 
 interface EquipmentCardProps {
@@ -35,9 +37,20 @@ export default function EquipmentCard({ equipment, showBookButton = false }: Equ
     router.push(`/equipment/${equipment.id}/book`);
   };
 
+  const firstPhotoUrl = equipment.photos?.[0]
+    ? supabase.storage.from('equipment').getPublicUrl(equipment.photos[0]).data.publicUrl
+    : null;
+
   return (
     <Card style={styles.card}>
       <Card.Content>
+        {firstPhotoUrl && (
+          <Image
+            source={{ uri: firstPhotoUrl }}
+            style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 12 }}
+            resizeMode="cover"
+          />
+        )}
         <View style={styles.header}>
           <Text variant="titleMedium" style={styles.title}>
             {equipment.name}
