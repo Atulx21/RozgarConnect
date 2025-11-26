@@ -14,6 +14,7 @@ interface Equipment {
   availability_end: string;
   owner_id: string;
   created_at: string;
+  photos?: string[]; // added to allow image display
   profiles?: {
     id: string;
     full_name: string;

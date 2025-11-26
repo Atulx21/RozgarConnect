@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, Image } from 'react-native';
 import { Text, Card, Button, Chip } from 'react-native-paper';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -21,8 +21,7 @@ export default function MyEquipmentBookingsScreen() {
           .from('equipment_bookings')
           .select(`
             *,
-            equipment:equipment_id (id, name, equipment_type, owner_id),
-            owner:equipment.owner_id (full_name)
+            equipment:equipment_id (id, name, equipment_type, owner_id, photos)
           `)
           .eq('renter_id', user.id)
           .order('start_date', { ascending: false });
@@ -31,25 +30,37 @@ export default function MyEquipmentBookingsScreen() {
         setBookings(data || []);
       } catch (e) {
         setBookings([]);
+        Alert.alert('Error', 'Failed to load bookings.');
       } finally {
         setLoading(false);
       }
     })();
   }, [user?.id]);
 
-  const cancelBooking = async (bookingId: string) => {
-    try {
-      const { error } = await supabase
-        .from('equipment_bookings')
-        .update({ status: 'cancelled' })
-        .eq('id', bookingId)
-        .eq('status', 'pending');
+  // Add cancel booking feature to avoid undefined function error
+  const cancelBooking = (bookingId: string | number) => {
+    Alert.alert('Cancel Booking', 'Are you sure you want to cancel this request?', [
+      { text: 'No' },
+      {
+        text: 'Yes',
+        onPress: async () => {
+          const { error } = await supabase
+            .from('equipment_bookings')
+            .update({ status: 'cancelled' })
+            .eq('id', bookingId);
 
-      if (error) throw error;
-      setBookings((prev) => prev.map(b => b.id === bookingId ? { ...b, status: 'cancelled' } : b));
-    } catch (e: any) {
-      // Silently fail or show alert
-    }
+          if (error) {
+            Alert.alert('Error', 'Failed to cancel booking.');
+            return;
+          }
+
+          // Update local state so the UI reflects the change immediately
+          setBookings((prev) =>
+            prev.map((b) => (b.id === bookingId ? { ...b, status: 'cancelled' } : b))
+          );
+        },
+      },
+    ]);
   };
 
   return (
@@ -69,6 +80,13 @@ export default function MyEquipmentBookingsScreen() {
         bookings.map((b) => (
           <Card key={b.id} style={styles.bookingCard}>
             <Card.Content>
+              {b.equipment?.photos?.[0] && (
+                <Image
+                  source={{ uri: supabase.storage.from('equipment').getPublicUrl(b.equipment.photos[0]).data.publicUrl }}
+                  style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 12 }}
+                  resizeMode="cover"
+                />
+              )}
               <View style={styles.headerRow}>
                 <Text variant="titleMedium">{b.equipment?.name || 'Equipment'}</Text>
                 <Chip>{b.status.charAt(0).toUpperCase() + b.status.slice(1)}</Chip>

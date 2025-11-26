@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
-import { Text, TextInput, Button, Card, IconButton, ActivityIndicator } from 'react-native-paper';
+import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform, TouchableOpacity, RefreshControl, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
+import { Text, TextInput, Button, Card, IconButton, ActivityIndicator, Avatar } from 'react-native-paper';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 
+// Top of file - extend Message type to support local-only flags
 type Message = {
   id: string;
   equipment_id: string;
@@ -12,6 +13,8 @@ type Message = {
   recipient_id: string;
   message: string;
   created_at: string;
+  pending?: boolean; // local-only flag for optimistic updates
+  failed?: boolean;  // local-only flag to show retry option
 };
 
 export default function EquipmentChatScreen() {
@@ -26,6 +29,42 @@ export default function EquipmentChatScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
+
+  // Track seen message IDs to avoid duplicates when both fetch and realtime add the same row
+  const seenMessageIdsRef = useRef<Set<string>>(new Set());
+
+  // NEW: recipient profile for header (best-effort)
+  const [recipientProfile, setRecipientProfile] = useState<{ full_name?: string; avatar_url?: string } | null>(null);
+  // NEW: pull-to-refresh + scroll-to-bottom button
+  const [refreshing, setRefreshing] = useState(false);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+
+  // Helper: sort messages by created_at ascending
+  const sortMessagesAsc = (list: Message[]) =>
+    list.slice().sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+
+  // NEW: best-effort fetch of recipient profile (safe if table exists)
+  useEffect(() => {
+    const fetchRecipientProfile = async () => {
+      if (!recipient) return;
+      try {
+        const { data, error: profileError } = await supabase
+          .from('profiles')
+          .select('full_name, avatar_url')
+          .eq('id', recipient)
+          .single();
+        if (!profileError) {
+          setRecipientProfile(data ?? null);
+        }
+      } catch {
+        // silent fail, header will fallback
+      }
+    };
+    fetchRecipientProfile();
+  }, [recipient]);
 
   useEffect(() => {
     if (!equipmentId || !user) {
@@ -42,9 +81,13 @@ export default function EquipmentChatScreen() {
           .select('*')
           .eq('equipment_id', equipmentId)
           .order('created_at', { ascending: true });
-        
+
         if (fetchError) throw fetchError;
-        setMessages(data || []);
+
+        const sorted = sortMessagesAsc(data || []);
+        setMessages(sorted);
+        // Populate the seen set for de-duplication
+        seenMessageIdsRef.current = new Set((sorted || []).map((m) => m.id));
         setError(null);
       } catch (e) {
         console.error('Error fetching messages:', e);
@@ -56,23 +99,52 @@ export default function EquipmentChatScreen() {
 
     fetchMessages();
 
-    // Realtime subscription
+    // Realtime subscription - listen to all change types for future-proofing
     const channel = supabase
       .channel(`equipment_messages_${equipmentId}`)
       .on(
         'postgres_changes',
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'equipment_messages', 
-          filter: `equipment_id=eq.${equipmentId}` 
+        {
+          event: '*',
+          schema: 'public',
+          table: 'equipment_messages',
+          filter: `equipment_id=eq.${equipmentId}`,
         },
         (payload: any) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
-          // Auto-scroll to bottom when new message arrives
-          setTimeout(() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
+          const newMsg = payload.new as Message | undefined;
+          const oldMsg = payload.old as Message | undefined;
+
+          // Handle inserts
+          if (payload.eventType === 'INSERT' && newMsg) {
+            if (!seenMessageIdsRef.current.has(newMsg.id)) {
+              seenMessageIdsRef.current.add(newMsg.id);
+              setMessages((prev) => {
+                const next = sortMessagesAsc([...prev, newMsg]);
+                return next;
+              });
+              // Auto-scroll to bottom when new message arrives
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }, 100);
+            }
+          }
+
+          // Handle updates (rare for messages, but added for completeness)
+          if (payload.eventType === 'UPDATE' && newMsg) {
+            setMessages((prev) => {
+              const idx = prev.findIndex((m) => m.id === newMsg.id);
+              if (idx === -1) return prev;
+              const next = [...prev];
+              next[idx] = newMsg;
+              return sortMessagesAsc(next);
+            });
+          }
+
+          // Handle deletes (rare, but added for completeness)
+          if (payload.eventType === 'DELETE' && oldMsg) {
+            setMessages((prev) => prev.filter((m) => m.id !== oldMsg.id));
+            seenMessageIdsRef.current.delete(oldMsg.id);
+          }
         }
       )
       .subscribe();
@@ -81,6 +153,37 @@ export default function EquipmentChatScreen() {
       supabase.removeChannel(channel);
     };
   }, [equipmentId, user?.id]);
+
+  // NEW: pull-to-refresh helper
+  const refreshMessages = async () => {
+    if (!equipmentId) return;
+    setRefreshing(true);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('equipment_messages')
+        .select('*')
+        .eq('equipment_id', equipmentId)
+        .order('created_at', { ascending: true });
+
+      if (fetchError) throw fetchError;
+
+      const sorted = sortMessagesAsc(data || []);
+      setMessages(sorted);
+      seenMessageIdsRef.current = new Set((sorted || []).map((m) => m.id));
+    } catch (e) {
+      console.error('Error refreshing messages:', e);
+      setError('Failed to refresh messages');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // NEW: track scroll position to show/hide the FAB
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    setIsAtBottom(distanceFromBottom < 60);
+  };
 
   // Auto-scroll to bottom when messages load
   useEffect(() => {
@@ -91,30 +194,111 @@ export default function EquipmentChatScreen() {
     }
   }, [messages.length, loading]);
 
+  // UPDATED: Optimistic send, with pending and retry on failure
   const sendMessage = async () => {
     if (!user || !equipmentId || !recipient || !input.trim()) return;
-    
+
     setSending(true);
     const messageText = input.trim();
     setInput(''); // Clear input immediately for better UX
 
+    // Optimistic local message
+    const tempId = `local-${Date.now()}`;
+    const optimisticMsg: Message = {
+      id: tempId,
+      equipment_id: equipmentId,
+      sender_id: user.id,
+      recipient_id: recipient,
+      message: messageText,
+      created_at: new Date().toISOString(),
+      pending: true,
+    };
+
+    seenMessageIdsRef.current.add(tempId);
+    setMessages((prev) => {
+      const next = sortMessagesAsc([...prev, optimisticMsg]);
+      return next;
+    });
+    setTimeout(() => {
+      flatListRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+
     try {
-      const { error: insertError } = await supabase
+      const { data: inserted, error: insertError } = await supabase
         .from('equipment_messages')
         .insert({
           equipment_id: equipmentId,
           sender_id: user.id,
           recipient_id: recipient,
           message: messageText,
-        });
-      
+        })
+        .select()
+        .single();
+
       if (insertError) throw insertError;
+
+      if (inserted) {
+        // Replace optimistic message with the real one
+        setMessages((prev) => {
+          const idx = prev.findIndex((m) => m.id === tempId);
+          if (idx === -1) {
+            // It might have been replaced by realtime already; ensure it's present
+            if (!seenMessageIdsRef.current.has(inserted.id)) {
+              const next = sortMessagesAsc([...prev, inserted]);
+              return next;
+            }
+            return prev;
+          }
+          const next = [...prev];
+          next[idx] = inserted;
+          return sortMessagesAsc(next);
+        });
+        seenMessageIdsRef.current.add(inserted.id);
+        seenMessageIdsRef.current.delete(tempId);
+      }
     } catch (e) {
       console.error('Error sending message:', e);
-      setInput(messageText); // Restore message on error
-      setError('Failed to send message. Please try again.');
+      // Mark optimistic message as failed
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId ? { ...m, pending: false, failed: true } : m
+        )
+      );
+      setError('Failed to send message. Tap retry on the message or try again.');
     } finally {
       setSending(false);
+    }
+  };
+
+  // NEW: retry a failed optimistic message
+  const retryMessage = async (msg: Message) => {
+    if (!user || !equipmentId || !recipient || !msg.failed) return;
+    setSending(true);
+    try {
+      const { data: inserted, error } = await supabase
+        .from('equipment_messages')
+        .insert({
+          equipment_id: equipmentId,
+          sender_id: user.id,
+          recipient_id: recipient,
+          message: msg.message,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? inserted : m))
+      );
+      seenMessageIdsRef.current.add(inserted.id);
+    } catch (e) {
+      console.error('Error retrying message:', e);
+      setError('Failed to resend message. Please try again later.');
+    } finally {
+      setSending(false);
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     }
   };
 
@@ -133,6 +317,13 @@ export default function EquipmentChatScreen() {
              date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     }
   };
+
+  const recipientInitials = (recipientProfile?.full_name || 'User')
+    .split(' ')
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
 
   if (loading) {
     return (
@@ -158,8 +349,16 @@ export default function EquipmentChatScreen() {
             onPress={() => router.back()}
             iconColor="#2e7d32"
           />
+          <Avatar.Text
+            size={32}
+            label={recipientInitials}
+            style={styles.headerAvatar}
+            color="#fff"
+          />
           <View style={styles.headerTextContainer}>
-            <Text variant="titleLarge" style={styles.headerTitle}>Equipment Chat</Text>
+            <Text variant="titleLarge" style={styles.headerTitle}>
+              {recipientProfile?.full_name || 'Equipment Chat'}
+            </Text>
             <Text variant="bodySmall" style={styles.headerSubtitle}>
               {messages.length} {messages.length === 1 ? 'message' : 'messages'}
             </Text>
@@ -192,6 +391,11 @@ export default function EquipmentChatScreen() {
             <Text style={styles.emptySubtext}>Start the conversation!</Text>
           </View>
         }
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={refreshMessages} />
+        }
         renderItem={({ item, index }) => {
           const isMine = item.sender_id === user?.id;
           const prevMessage = index > 0 ? messages[index - 1] : null;
@@ -209,6 +413,34 @@ export default function EquipmentChatScreen() {
                 <Text style={[styles.messageText, isMine ? styles.myMessageText : styles.theirMessageText]}>
                   {item.message}
                 </Text>
+
+                {/* Status indicators for outgoing messages */}
+                {isMine && (item.pending || item.failed) && (
+                  <View style={styles.statusRow}>
+                    {item.pending && (
+                      <View style={styles.pendingRow}>
+                        <ActivityIndicator size="small" color={isMine ? '#fff' : '#2e7d32'} />
+                        <Text style={[styles.statusText, isMine ? styles.myMessageTime : styles.theirMessageTime]}>
+                          Sending...
+                        </Text>
+                      </View>
+                    )}
+                    {item.failed && (
+                      <TouchableOpacity onPress={() => retryMessage(item)} style={styles.retryRow}>
+                        <IconButton 
+                          icon="alert-circle" 
+                          size={14} 
+                          iconColor={isMine ? '#ffcdd2' : '#d32f2f'}
+                          style={styles.retryIcon}
+                        />
+                        <Text style={[styles.statusText, isMine ? styles.myMessageTime : styles.theirMessageTime]}>
+                          Tap to retry
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+
                 <Text style={[styles.messageTime, isMine ? styles.myMessageTime : styles.theirMessageTime]}>
                   {new Date(item.created_at).toLocaleTimeString('en-US', { 
                     hour: '2-digit', 
@@ -259,11 +491,27 @@ export default function EquipmentChatScreen() {
             )}
           </TouchableOpacity>
         </View>
+        {/* Optional character counter */}
+        <Text style={styles.charCounter}>
+          {input.length}/1000
+        </Text>
       </View>
+
+      {/* Scroll-to-bottom FAB */}
+      {!isAtBottom && messages.length > 0 && (
+        <TouchableOpacity
+          onPress={() => flatListRef.current?.scrollToEnd({ animated: true })}
+          style={styles.fabScroll}
+          activeOpacity={0.8}
+        >
+          <IconButton icon="chevron-down" size={20} iconColor="#fff" />
+        </TouchableOpacity>
+      )}
     </KeyboardAvoidingView>
   );
 }
 
+// Styles object - add new styles for status rows, header avatar, FAB, and counter
 const styles = StyleSheet.create({
   container: { 
     flex: 1, 
@@ -296,6 +544,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
+  },
+  headerAvatar: {
+    backgroundColor: '#2e7d32',
+    marginRight: 8,
   },
   headerTextContainer: {
     flex: 1,
@@ -403,6 +655,29 @@ const styles = StyleSheet.create({
   theirMessageTime: {
     color: '#999',
   },
+  // NEW: status rows for pending/failed
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  pendingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  retryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  statusText: {
+    fontSize: 10,
+    marginLeft: 4,
+  },
+  retryIcon: {
+    margin: 0,
+  },
 
   // Input Area
   inputContainer: {
@@ -449,5 +724,25 @@ const styles = StyleSheet.create({
   },
   sendIcon: {
     margin: 0,
+  },
+  // NEW: character counter
+  charCounter: {
+    textAlign: 'right',
+    color: '#999',
+    fontSize: 12,
+    marginTop: 6,
+  },
+  // NEW: scroll-to-bottom floating button
+  fabScroll: {
+    position: 'absolute',
+    right: 16,
+    bottom: Platform.OS === 'ios' ? 80 : 60,
+    backgroundColor: '#2e7d32',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    elevation: 3,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

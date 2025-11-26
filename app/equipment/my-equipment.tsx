@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, Image } from 'react-native';
 import { Text, Card, Button, Chip, FAB } from 'react-native-paper';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -127,6 +127,13 @@ export default function MyEquipmentScreen() {
           equipment.map((item) => (
             <Card key={item.id} style={styles.equipmentCard}>
               <Card.Content>
+                {item.photos?.[0] && (
+                  <Image
+                    source={{ uri: supabase.storage.from('equipment').getPublicUrl(item.photos[0]).data.publicUrl }}
+                    style={{ width: '100%', height: 160, borderRadius: 8, marginBottom: 12 }}
+                    resizeMode="cover"
+                  />
+                )}
                 <View style={styles.equipmentHeader}>
                   <Text variant="titleMedium" style={styles.equipmentName}>
                     {item.name}

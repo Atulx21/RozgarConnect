@@ -1,6 +1,6 @@
 // Top-level imports (add formatDate import)
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, Image } from 'react-native';
 import { Text, Card, Button, TextInput, Divider, Avatar } from 'react-native-paper';
 import { useLocalSearchParams, router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
@@ -31,6 +31,7 @@ interface Equipment {
   availability_end: string;
   owner_id: string;
   created_at: string;
+  photos?: string[]; // added to allow image display
   profiles: OwnerProfile;
 }
 
@@ -44,9 +45,16 @@ export default function BookEquipmentScreen() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [estimatedTotal, setEstimatedTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  // Add missing date picker toggles
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
+
+  // Auto-sync endDate to startDate for per-hour rentals to reduce confusion
+  useEffect(() => {
+    if (equipment?.price_type === 'per_hour' && startDate) {
+      setEndDate(startDate);
+    }
+  }, [equipment?.price_type, startDate]);
+
   const [booking, setBooking] = useState(false);
 
   const equipmentId = Array.isArray(id) ? id[0] : (id as string | undefined);
@@ -92,6 +100,12 @@ export default function BookEquipmentScreen() {
       return;
     }
 
+    // Prevent owner from booking their own equipment
+    if (equipment.owner_id === user.id) {
+      Alert.alert('Not allowed', 'You cannot book your own equipment.');
+      return;
+    }
+
     const start = new Date(startDate);
     const end = new Date(endDate);
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
@@ -102,6 +116,18 @@ export default function BookEquipmentScreen() {
       Alert.alert('Invalid period', 'Start date must be before end date.');
       return;
     }
+
+    // Validate against availability window
+    const availStart = new Date(equipment.availability_start);
+    const availEnd = new Date(equipment.availability_end);
+    if (start < availStart || end > availEnd) {
+      Alert.alert(
+        'Unavailable',
+        `Selected dates must be within availability: ${availStart.toLocaleDateString()} - ${availEnd.toLocaleDateString()}`
+      );
+      return;
+    }
+
     if (equipment.price_type === 'per_hour') {
       const h = Number(hours);
       if (!h || h <= 0) {
@@ -159,16 +185,23 @@ export default function BookEquipmentScreen() {
 
       // Notify owner about new booking request (best-effort)
       if (equipment.owner_id) {
-        await supabase.from('notifications').insert({
-          user_id: equipment.owner_id,
-          title: 'New Equipment Booking Request',
-          body: `You have a new booking request for ${equipment.name}.`,
-          read: false,
-        }).catch(() => {});
+        const { error: notifErr } = await supabase
+          .from('notifications')
+          .insert({
+            user_id: equipment.owner_id,
+            title: 'New Equipment Booking Request',
+            body: `You have a new booking request for ${equipment.name}.`,
+            read: false,
+          });
+    
+        if (notifErr) {
+          console.warn('Notification insert failed', notifErr.message);
+        }
       }
 
       Alert.alert('Booking request sent', 'The owner will review your booking.');
-      router.push(`/equipment/${equipmentId}`);
+      // Route to My Equipment Bookings for clear confirmation
+      router.push('/equipment/my-bookings');
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to create booking.');
     } finally {
@@ -189,6 +222,20 @@ export default function BookEquipmentScreen() {
 
       if (error) throw error;
       setEquipment(data as Equipment);
+
+      // Auto-set sensible default dates within availability window
+      const eq = data as Equipment;
+      const availStart = new Date(eq.availability_start);
+      const availEnd = new Date(eq.availability_end);
+      const today = new Date();
+
+      // default start is the later of today or availability start
+      const defaultStart = today < availStart ? availStart : today;
+      // for per-hour, end equals start; for per-day, set end equal to start initially
+      const defaultEnd = eq.price_type === 'per_hour' ? defaultStart : defaultStart;
+
+      setStartDate(formatDateForInput(defaultStart));
+      setEndDate(formatDateForInput(defaultEnd));
     } catch (error) {
       console.error('Error fetching equipment details:', error);
       Alert.alert('Error', 'Failed to load equipment details');
@@ -281,6 +328,11 @@ export default function BookEquipmentScreen() {
     );
   }
 
+  // Compute primary image for booking screen
+  const firstPhotoUrl = equipment?.photos?.[0]
+    ? supabase.storage.from('equipment').getPublicUrl(equipment.photos[0]).data.publicUrl
+    : null;
+
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
@@ -296,6 +348,14 @@ export default function BookEquipmentScreen() {
           Book Equipment
         </Text>
       </View>
+
+      {firstPhotoUrl && (
+        <Image
+          source={{ uri: firstPhotoUrl }}
+          style={{ width: '100%', height: 220, borderRadius: 12, marginBottom: 12 }}
+          resizeMode="cover"
+        />
+      )}
 
       <Card style={styles.equipmentCard}>
         <Card.Content>
@@ -329,7 +389,7 @@ export default function BookEquipmentScreen() {
             />
             <TextInput
               mode="outlined"
-              label="End Date"
+              label={equipment?.price_type === 'per_hour' ? 'End Date (auto)' : 'End Date'}
               value={endDate}
               style={[styles.input, { flex: 1 }]}
               editable={false}
@@ -337,6 +397,11 @@ export default function BookEquipmentScreen() {
               right={<TextInput.Icon icon="calendar" onPress={() => setShowEndPicker(true)} />}
             />
           </View>
+
+          {/* Helpful hint to show availability window */}
+          <Text style={{ color: '#666', marginBottom: 8 }}>
+            Available between {new Date(equipment.availability_start).toLocaleDateString()} and {new Date(equipment.availability_end).toLocaleDateString()}
+          </Text>
 
           {showStartPicker && (
             <DateTimePicker
@@ -346,7 +411,12 @@ export default function BookEquipmentScreen() {
               onChange={(event: DateTimePickerEvent, date?: Date) => {
                 setShowStartPicker(false);
                 if (event.type === 'set' && date) {
-                  setStartDate(formatDateForInput(date));
+                  const selected = formatDateForInput(date);
+                  setStartDate(selected);
+                  // auto-sync for per-hour
+                  if (equipment?.price_type === 'per_hour') {
+                    setEndDate(selected);
+                  }
                 }
               }}
             />

@@ -12,6 +12,8 @@ export default function EquipmentBookingsScreen() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [equipmentName, setEquipmentName] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | number | null>(null);
 
   useEffect(() => {
     if (!equipmentId) {
@@ -21,6 +23,24 @@ export default function EquipmentBookingsScreen() {
 
     // Initial fetch
     refetch();
+
+    // Also fetch equipment meta to determine owner and show correct actions
+    const fetchEquipmentMeta = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('equipment')
+          .select('owner_id, name')
+          .eq('id', equipmentId)
+          .single();
+        if (!error && data) {
+          setOwnerId(data.owner_id || null);
+          setEquipmentName(data.name || null);
+        }
+      } catch {
+        // non-blocking
+      }
+    };
+    fetchEquipmentMeta();
 
     // Real-time subscription to bookings for this equipment
     const channel = supabase
@@ -71,6 +91,22 @@ export default function EquipmentBookingsScreen() {
         Alert.alert('Not allowed', 'Only the equipment owner can approve bookings.');
         return;
       }
+
+      // Confirm approval action
+      const confirm = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'Approve Booking',
+          `Approve booking request from ${booking.profiles?.full_name || 'renter'}?`,
+          [
+            { text: 'Cancel', onPress: () => resolve(false) },
+            { text: 'Approve', onPress: () => resolve(true) },
+          ]
+        );
+      });
+      if (!confirm) return;
+
+      setActionLoadingId(booking.id);
+
       // Check overlap vs approved bookings
       const { data: approved } = await supabase
         .from('equipment_bookings')
@@ -97,18 +133,28 @@ export default function EquipmentBookingsScreen() {
 
       if (error) throw error;
 
-      // Notify renter (best-effort)
-      await supabase.from('notifications').insert({
-        user_id: booking.renter_id,
-        title: 'Booking Approved',
-        body: 'Your equipment booking request has been approved.',
-        read: false,
-      }).catch(() => {});
+      // Optimistically update local state for better UX
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? { ...b, status: 'approved' } : b)));
 
+      // Notify renter (best-effort)
+      const { error: notifErrApprove } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: booking.renter_id,
+          title: 'Booking Approved',
+          body: `Your booking for ${equipmentName || 'equipment'} has been approved.`,
+          read: false,
+        });
+      
+      if (notifErrApprove) {
+        console.warn('Notification insert failed', notifErrApprove.message);
+      }
       Alert.alert('Approved', 'Booking approved successfully.');
       await refetch();
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to approve booking.');
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -119,6 +165,21 @@ export default function EquipmentBookingsScreen() {
         return;
       }
 
+      // Confirm rejection action
+      const confirm = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'Reject Booking',
+          `Reject booking request from ${booking.profiles?.full_name || 'renter'}?`,
+          [
+            { text: 'Cancel', onPress: () => resolve(false) },
+            { text: 'Reject', onPress: () => resolve(true) },
+          ]
+        );
+      });
+      if (!confirm) return;
+
+      setActionLoadingId(booking.id);
+
       const { error } = await supabase
         .from('equipment_bookings')
         .update({ status: 'rejected' })
@@ -126,18 +187,28 @@ export default function EquipmentBookingsScreen() {
 
       if (error) throw error;
 
-      // Notify renter (best-effort)
-      await supabase.from('notifications').insert({
-        user_id: booking.renter_id,
-        title: 'Booking Rejected',
-        body: 'Your equipment booking request has been rejected.',
-        read: false,
-      }).catch(() => {});
+      // Optimistically update local state for better UX
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? { ...b, status: 'rejected' } : b)));
 
+      // Notify renter (best-effort)
+      const { error: notifErrReject } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: booking.renter_id,
+          title: 'Booking Rejected',
+          body: `Your booking for ${equipmentName || 'equipment'} has been rejected.`,
+          read: false,
+        });
+    
+      if (notifErrReject) {
+        console.warn('Notification insert failed', notifErrReject.message);
+      }
       Alert.alert('Rejected', 'Booking rejected.');
       await refetch();
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to reject booking.');
+    } finally {
+      setActionLoadingId(null);
     }
   };
   return (
@@ -180,13 +251,14 @@ export default function EquipmentBookingsScreen() {
                     <Button
                       mode="contained"
                       onPress={() => approveBooking(b)}
-                      style={{ backgroundColor: '#4caf50' }}
+                      disabled={actionLoadingId === b.id}
                     >
                       Approve
                     </Button>
                     <Button
                       mode="outlined"
                       onPress={() => rejectBooking(b)}
+                      disabled={actionLoadingId === b.id}
                     >
                       Reject
                     </Button>
