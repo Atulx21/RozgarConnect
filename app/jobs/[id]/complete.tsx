@@ -116,13 +116,30 @@ export default function CompleteJobScreen() {
       });
   };
 
-  const proceedToRating = () => {
-    // Navigate directly to rating screen
-    // Job will be marked as completed after rating is submitted
-    const goToRate = () => {
-      if (!jobId) return;
+  const markComplete = async () => {
+    try {
+      setLoading(true);
+      // use 'completed' to satisfy jobs_status_check constraint (was 'finished' -> violates constraint)
+      const { data, error } = await supabase
+        .from('jobs')
+        .update({ status: 'completed' })
+        .eq('id', jobId);
+
+      if (error) {
+        console.error('markComplete supabase error', error);
+        throw error;
+      }
+
+      Alert.alert('Success', 'Job marked completed.');
       router.push(`/jobs/${jobId}/rate`);
-    };
+    } catch (err: any) {
+      console.error('markComplete error', err);
+      // show database message when available
+      const msg = err?.message ?? 'Unable to complete job. Try again.';
+      Alert.alert('Error', msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -351,7 +368,7 @@ export default function CompleteJobScreen() {
             </Text>
 
             <TouchableOpacity 
-              onPress={proceedToRating}
+              onPress={markComplete}
               activeOpacity={0.85}
               style={styles.completeButtonWrapper}
             >
