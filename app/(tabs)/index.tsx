@@ -134,7 +134,7 @@ export default function HomeScreen() {
               </View>
               
               <Text variant="displaySmall" style={styles.heroTitle}>
-                Gramin KaamConnect
+                RozgarConnect
               </Text>
               <Text variant="bodyLarge" style={styles.heroSubtitle}>
                 Empowering rural communities through digital work opportunities
